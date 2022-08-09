@@ -9,6 +9,19 @@
 # if the necessary environment variables are set.
 #
 
+# Default to off
+# WRAPPER_KILLSWITCH=true
+# REMOVE THIS
+WRAPPER_KILLSWITCH=false
+
+if [[ $WRAPPER_KILLSWITCH = true ]]; then
+    echo "Using current forge wrapper"
+else
+    echo "Running new forge wrapper"
+    export FORGE_INSTALL_DEPENDENCIES=yeet
+    exec python3 testsuite/forge.py test "$@"
+fi
+
 # ensure the script is run from project root
 pwd | grep -qE 'aptos-core$' || (echo "Please run from aptos-core root directory" && exit 1)
 
