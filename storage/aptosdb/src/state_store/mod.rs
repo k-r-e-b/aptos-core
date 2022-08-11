@@ -27,17 +27,15 @@ use aptos_types::{
 };
 use executor_types::in_memory_state_calculator::InMemoryStateCalculator;
 use schemadb::{ReadOptions, SchemaBatch, DB};
-use std::ops::Deref;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 use storage_interface::{
     cached_state_view::CachedStateView, state_delta::StateDelta,
     sync_proof_fetcher::SyncProofFetcher, DbReader, StateSnapshotReceiver,
 };
 
-use crate::state_store::buffered_state::BufferedState;
 use crate::{
     change_set::ChangeSet, schema::state_value::StateValueSchema, state_merkle_db::StateMerkleDb,
-    AptosDbError, LedgerStore, TransactionStore,
+    state_store::buffered_state::BufferedState, AptosDbError, LedgerStore, TransactionStore,
 };
 
 pub(crate) mod buffered_state;
@@ -204,9 +202,13 @@ impl StateStore {
         ledger_db: Arc<DB>,
         state_merkle_db: Arc<DB>,
         target_snapshot_size: usize,
+        max_nodes_per_lru_cache_shard: usize,
         hack_for_tests: bool,
     ) -> Self {
-        let state_merkle_db = Arc::new(StateMerkleDb::new(state_merkle_db));
+        let state_merkle_db = Arc::new(StateMerkleDb::new(
+            state_merkle_db,
+            max_nodes_per_lru_cache_shard,
+        ));
         let state_db = Arc::new(StateDb {
             ledger_db,
             state_merkle_db,

@@ -3,14 +3,14 @@
 
 //! This file defines the state merkle snapshot committer running in background thread.
 
-use crate::state_merkle_db::StateMerkleDb;
-use crate::state_store::buffered_state::CommitMessage;
-use crate::OTHER_TIMERS_SECONDS;
+use crate::{
+    state_merkle_db::StateMerkleDb, state_store::buffered_state::CommitMessage,
+    OTHER_TIMERS_SECONDS,
+};
 use aptos_crypto::HashValue;
 use aptos_logger::{info, trace};
 use schemadb::SchemaBatch;
-use std::sync::mpsc::Receiver;
-use std::sync::Arc;
+use std::sync::{mpsc::Receiver, Arc};
 use storage_interface::state_delta::StateDelta;
 
 pub struct StateMerkleBatch {
@@ -55,6 +55,11 @@ impl StateMerkleBatchCommitter {
                     self.state_merkle_db
                         .write_schemas(batch)
                         .expect("State merkle batch commit failed.");
+                    self.state_merkle_db
+                        .version_cache()
+                        .maybe_evict_version(&self.state_merkle_db.lru_cache());
+                    // TODO(grao): Consider remove the following sender once we verified the
+                    // version cache correctly cached all nodes we need.
                     snapshot_ready_sender.send(()).unwrap();
                     info!(
                         version = state_delta.current_version,

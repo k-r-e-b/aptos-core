@@ -2,22 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_config::config::StoragePrunerConfig;
-use std::collections::HashMap;
-use std::sync::mpsc::channel;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{mpsc::channel, Arc},
+};
 
 use aptos_crypto::HashValue;
 use aptos_temppath::TempPath;
-use aptos_types::state_store::{state_key::StateKey, state_value::StateValue};
-use aptos_types::transaction::Version;
+use aptos_types::{
+    state_store::{state_key::StateKey, state_value::StateValue},
+    transaction::Version,
+};
 use schemadb::{ReadOptions, DB};
 use storage_interface::{jmt_update_refs, jmt_updates, DbReader};
 
-use crate::pruner::state_pruner_worker::StatePrunerWorker;
-use crate::stale_node_index::StaleNodeIndexSchema;
 use crate::{
-    change_set::ChangeSet, pruner::*, state_store::StateStore, AptosDB, PrunerManager,
-    StatePrunerManager,
+    change_set::ChangeSet,
+    pruner::{state_pruner_worker::StatePrunerWorker, *},
+    stale_node_index::StaleNodeIndexSchema,
+    state_store::StateStore,
+    AptosDB, PrunerManager, StatePrunerManager,
 };
 
 fn put_value_set(
@@ -75,6 +79,7 @@ fn test_state_store_pruner() {
         Arc::clone(&aptos_db.ledger_db),
         Arc::clone(&aptos_db.state_merkle_db),
         1000,  /* snapshot_size_threshold, does not matter */
+        1024,  /* max_num_nodes_per_lru_cache_shard, does not matter */
         false, /* hack_for_tests */
     );
     let pruner = StatePrunerManager::new(
