@@ -49,6 +49,47 @@ module std::bit_vector {
         aborts_if length >= MAX_SIZE with ELENGTH;
     }
 
+    /// Creates a bit vector from a vector of bytes, where the bits are stored in little-endian order.
+    ///
+    /// e.g., 0x1C would typically be expressed in binary as:
+    ///     bit: 0 0 0 1 1 1 0 0
+    ///     idx: 0 1 2 3 4 5 6 7
+    ///
+    /// However, this function will represent it by reversing the bits as:
+    ///     bit: 0 0 1 1 1 0 0 0
+    ///     idx: 0 1 2 3 4 5 6 7
+    public fun new_little_endian_from_byte_vector(v: vector<u8>): BitVector {
+        let bits = little_endian_bitvector_from_byte_vector_internal(v);
+        let len = std::vector::length(&v) * 8u64;
+
+        //assert!(std::vector::length(&bits) == len, ELENGTH);
+
+        BitVector {
+            length: len,
+            bit_field: bits,
+        }
+    }
+
+    /// Creates a bit vector from a vector of bytes, where the bits are stored in big-endian order.
+    ///
+    /// e.g., 0x1C would be represented as:
+    ///     bit: 0 0 0 1 1 1 0 0
+    ///     idx: 0 1 2 3 4 5 6 7
+    public fun new_big_endian_from_byte_vector(v: vector<u8>): BitVector {
+        let bits = big_endian_bitvector_from_byte_vector_internal(v);
+        let len = std::vector::length(&v) * 8u64;
+
+        //assert!(std::vector::length(&bits) == len, ELENGTH);
+
+        BitVector {
+            length: len,
+            bit_field: bits,
+        }
+    }
+
+    native fun little_endian_bitvector_from_byte_vector_internal(v: vector<u8>): vector<bool>;
+    native fun big_endian_bitvector_from_byte_vector_internal(v: vector<u8>): vector<bool>;
+
     /// Set the bit at `bit_index` in the `bitvector` regardless of its previous state.
     public fun set(bitvector: &mut BitVector, bit_index: u64) {
         assert!(bit_index < vector::length(&bitvector.bit_field), EINDEX);
