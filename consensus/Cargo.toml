@@ -35,6 +35,7 @@ aptos-infallible = { path = "../crates/aptos-infallible" }
 aptos-logger = { path = "../crates/aptos-logger" }
 aptos-mempool = { path = "../mempool" }
 aptos-metrics-core = { path = "../crates/aptos-metrics-core" }
+aptos-runtime = { path = "../crates/aptos-runtime" }
 aptos-secure-storage = { path = "../secure/storage" }
 aptos-temppath = { path = "../crates/aptos-temppath" }
 aptos-types = { path = "../types" }

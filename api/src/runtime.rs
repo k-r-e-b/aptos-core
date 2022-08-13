@@ -5,6 +5,7 @@ use crate::{context::Context, index, poem_backend::attach_poem_to_runtime};
 use anyhow::Context as AnyhowContext;
 use aptos_config::config::{ApiConfig, NodeConfig};
 use aptos_mempool::MempoolClientSender;
+use aptos_runtime::instrumented_runtime::instrument_tokio_runtime;
 use aptos_types::chain_id::ChainId;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use storage_interface::DbReader;
@@ -28,6 +29,7 @@ pub fn bootstrap(
         .enable_all()
         .build()
         .context("[api] failed to create runtime")?;
+    instrument_tokio_runtime(&runtime, "api");
     let context = Context::new(chain_id, db, mp_sender, config.clone());
 
     // Poem will run on a different port.
