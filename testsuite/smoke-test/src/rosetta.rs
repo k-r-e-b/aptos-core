@@ -103,9 +103,10 @@ async fn test_network() {
     let request = NetworkRequest {
         network_identifier: NetworkIdentifier::from(chain_id),
     };
-    let status = rosetta_client.network_status(&request).await.unwrap();
-    assert!(status.current_block_identifier.index > 0);
-    assert!(status.current_block_timestamp > Y2K_MS);
+    let status = try_until_ok_default(|| rosetta_client.network_status(&request))
+        .await
+        .unwrap();
+    assert!(status.current_block_timestamp >= Y2K_MS);
     assert_eq!(
         BlockIdentifier {
             index: 0,
@@ -148,12 +149,12 @@ async fn test_account_balance() {
     let mut account_2_balance = DEFAULT_FUNDED_COINS;
     // At some time both accounts should exist with initial amounts
     try_until_ok(Duration::from_secs(5), DEFAULT_INTERVAL_DURATION, || {
-        account_has_balance(&rosetta_client, chain_id, account_1, account_1_balance)
+        account_has_balance(&rosetta_client, chain_id, account_1, account_1_balance, 0)
     })
     .await
     .unwrap();
     try_until_ok_default(|| {
-        account_has_balance(&rosetta_client, chain_id, account_2, account_2_balance)
+        account_has_balance(&rosetta_client, chain_id, account_2, account_2_balance, 0)
     })
     .await
     .unwrap();
@@ -174,10 +175,10 @@ async fn test_account_balance() {
         .unwrap();
     account_1_balance -= TRANSFER_AMOUNT + response.gas_used * response.gas_unit_price;
     account_2_balance += TRANSFER_AMOUNT;
-    account_has_balance(&rosetta_client, chain_id, account_1, account_1_balance)
+    account_has_balance(&rosetta_client, chain_id, account_1, account_1_balance, 1)
         .await
         .unwrap();
-    account_has_balance(&rosetta_client, chain_id, account_2, account_2_balance)
+    account_has_balance(&rosetta_client, chain_id, account_2, account_2_balance, 0)
         .await
         .unwrap();
 
@@ -205,10 +206,21 @@ async fn test_account_balance() {
     let failed_txn = txns.last().unwrap();
     if let Transaction::UserTransaction(txn) = failed_txn {
         account_1_balance -= txn.request.gas_unit_price.0 * txn.info.gas_used.0;
-        account_has_balance(&rosetta_client, chain_id, account_1, account_1_balance)
+        account_has_balance(&rosetta_client, chain_id, account_1, account_1_balance, 2)
             .await
             .unwrap();
     }
+
+    // Check that the balance hasn't changed (and should be 0) in the invalid account
+    account_has_balance(
+        &rosetta_client,
+        chain_id,
+        AccountAddress::from_hex_literal(INVALID_ACCOUNT).unwrap(),
+        0,
+        0,
+    )
+    .await
+    .unwrap();
 }
 
 async fn account_has_balance(
@@ -216,8 +228,11 @@ async fn account_has_balance(
     chain_id: ChainId,
     account: AccountAddress,
     expected_balance: u64,
+    expected_sequence_number: u64,
 ) -> anyhow::Result<u64> {
     let response = get_balance(rosetta_client, chain_id, account, None).await?;
+    assert_eq!(expected_sequence_number, response.metadata.sequence_number);
+
     if response.balances.iter().any(|amount| {
         amount.currency == native_coin() && amount.value == expected_balance.to_string()
     }) {
@@ -338,7 +353,7 @@ async fn test_block() {
     };
 
     let start = Instant::now();
-    let max_wait = Duration::from_secs(1);
+    let max_wait = Duration::from_secs(5);
     let mut successful = false;
     while start.elapsed() < max_wait {
         if rosetta_client
@@ -347,12 +362,12 @@ async fn test_block() {
             .unwrap()
             .current_block_identifier
             .index
-            == latest_block.block_identifier.index
+            >= latest_block.block_identifier.index
         {
             successful = true;
             break;
         }
-        tokio::time::sleep(Duration::from_micros(10)).await
+        tokio::time::sleep(Duration::from_micros(50)).await
     }
 
     assert!(successful, "Failed to get the next block");
@@ -368,14 +383,18 @@ async fn test_block() {
     assert!(newer_block.timestamp >= latest_block.timestamp);
 }
 
+// TODO: Unignore this when we have get_block_info for the v1 API.
+#[ignore]
 #[tokio::test]
 async fn test_block_transactions() {
     let (swarm, cli, _faucet, rosetta_client) = setup_test(1, 2).await;
     let chain_id = swarm.chain_id();
 
     // Make sure first that there's money to transfer
-    assert_eq!(DEFAULT_FUNDED_COINS, cli.account_balance(0).await.unwrap());
-    assert_eq!(DEFAULT_FUNDED_COINS, cli.account_balance(1).await.unwrap());
+    cli.assert_account_balance_now(0, DEFAULT_FUNDED_COINS)
+        .await;
+    cli.assert_account_balance_now(1, DEFAULT_FUNDED_COINS)
+        .await;
 
     // Now let's see some transfers
     const TRANSFER_AMOUNT: u64 = 5000;
@@ -487,13 +506,16 @@ async fn test_block_transactions() {
     }
 }
 
+// TODO: Unignore this when we have get_block_info for the v1 API.
+#[ignore]
 #[tokio::test]
 async fn test_invalid_transaction_gas_charged() {
     let (swarm, cli, _faucet, rosetta_client) = setup_test(1, 1).await;
     let chain_id = swarm.chain_id();
 
     // Make sure first that there's money to transfer
-    assert_eq!(DEFAULT_FUNDED_COINS, cli.account_balance(0).await.unwrap());
+    cli.assert_account_balance_now(0, DEFAULT_FUNDED_COINS)
+        .await;
 
     // Now let's see some transfers
     const TRANSFER_AMOUNT: u64 = 5000;

@@ -80,10 +80,13 @@ fn test_state_store_pruner() {
     let pruner = StatePrunerManager::new(
         Arc::clone(&aptos_db.state_merkle_db),
         StoragePrunerConfig {
-            state_store_prune_window: Some(0),
-            ledger_prune_window: Some(0),
+            enable_state_store_pruner: true,
+            enable_ledger_pruner: true,
+            state_store_prune_window: 0,
+            ledger_prune_window: 0,
             ledger_pruning_batch_size: prune_batch_size,
             state_store_pruning_batch_size: prune_batch_size,
+            user_pruning_window_offset: 0,
         },
     );
 
@@ -168,10 +171,13 @@ fn test_state_store_pruner_partial_version() {
     let pruner = StatePrunerManager::new(
         Arc::clone(&aptos_db.state_merkle_db),
         StoragePrunerConfig {
-            state_store_prune_window: Some(0),
-            ledger_prune_window: Some(0),
+            enable_state_store_pruner: true,
+            enable_ledger_pruner: true,
+            state_store_prune_window: 0,
+            ledger_prune_window: 0,
             ledger_pruning_batch_size: prune_batch_size,
             state_store_pruning_batch_size: prune_batch_size,
+            user_pruning_window_offset: 0,
         },
     );
 
@@ -339,10 +345,13 @@ fn test_worker_quit_eagerly() {
             state_pruner,
             command_receiver,
             StoragePrunerConfig {
-                state_store_prune_window: Some(1),
-                ledger_prune_window: Some(1),
+                enable_state_store_pruner: true,
+                enable_ledger_pruner: true,
+                state_store_prune_window: 1,
+                ledger_prune_window: 1,
                 ledger_pruning_batch_size: 100,
                 state_store_pruning_batch_size: 100,
+                user_pruning_window_offset: 0,
             },
         );
         command_sender

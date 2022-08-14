@@ -21,7 +21,7 @@ use move_deps::{
     move_binary_format::errors::{Location, VMResult},
     move_core_types::{
         account_address::AccountAddress,
-        effects::{ChangeSet as MoveChangeSet, Event as MoveEvent},
+        effects::{ChangeSet as MoveChangeSet, Event as MoveEvent, Op as MoveStorageOp},
         language_storage::ModuleId,
         vm_status::{StatusCode, VMStatus},
     },
@@ -108,6 +108,16 @@ where
             .into_change_set()
             .map_err(|e| e.finish(Location::Undefined))?;
 
+        // TODO: Once we are ready to connect aggregator with delta writes,
+        // make sure we pass them to the session output.
+        //
+        // Expected changes will be:
+        //   * Use `Aggregator` for gas fees tracking in coin.
+        //   * Pass `aggregator_change_set` further to produce `DeltaChangeSet`.
+        //   * Have e2e tests and benchmarks.
+        // let aggregator_context: NativeAggregatorContext = extensions.remove();
+        // let _ = aggregator_context.into_change_set();
+
         Ok(SessionOutput {
             change_set,
             events,
@@ -146,6 +156,8 @@ impl SessionOutput {
         self,
         ap_cache: &mut C,
     ) -> Result<ChangeSet, VMStatus> {
+        use MoveStorageOp::*;
+
         let Self {
             change_set,
             events,
@@ -155,20 +167,20 @@ impl SessionOutput {
         let mut write_set_mut = WriteSetMut::new(Vec::new());
         for (addr, account_changeset) in change_set.into_inner() {
             let (modules, resources) = account_changeset.into_inner();
-            for (struct_tag, blob_opt) in resources {
+            for (struct_tag, blob_op) in resources {
                 let ap = ap_cache.get_resource_path(addr, struct_tag);
-                let op = match blob_opt {
-                    None => WriteOp::Deletion,
-                    Some(blob) => WriteOp::Value(blob),
+                let op = match blob_op {
+                    Delete => WriteOp::Deletion,
+                    New(blob) | Modify(blob) => WriteOp::Value(blob),
                 };
                 write_set_mut.push((StateKey::AccessPath(ap), op))
             }
 
-            for (name, blob_opt) in modules {
+            for (name, blob_op) in modules {
                 let ap = ap_cache.get_module_path(ModuleId::new(addr, name));
-                let op = match blob_opt {
-                    None => WriteOp::Deletion,
-                    Some(blob) => WriteOp::Value(blob),
+                let op = match blob_op {
+                    Delete => WriteOp::Deletion,
+                    New(blob) | Modify(blob) => WriteOp::Value(blob),
                 };
 
                 write_set_mut.push((StateKey::AccessPath(ap), op))
@@ -176,12 +188,13 @@ impl SessionOutput {
         }
 
         for (handle, change) in table_change_set.changes {
-            for (key, value_opt) in change.entries {
+            for (key, value_op) in change.entries {
                 let state_key = StateKey::table_item(handle.into(), key);
-                if let Some(bytes) = value_opt {
-                    write_set_mut.push((state_key, WriteOp::Value(bytes)))
-                } else {
-                    write_set_mut.push((state_key, WriteOp::Deletion))
+                match value_op {
+                    Delete => write_set_mut.push((state_key, WriteOp::Deletion)),
+                    New(bytes) | Modify(bytes) => {
+                        write_set_mut.push((state_key, WriteOp::Value(bytes)))
+                    }
                 }
             }
         }

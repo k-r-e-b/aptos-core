@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod compatibility_test;
+pub mod forge_setup_test;
 pub mod gas_price_test;
 pub mod network_bandwidth_test;
 pub mod network_latency_test;
+pub mod network_loss_test;
 pub mod network_partition_test;
 pub mod partial_nodes_down_test;
 pub mod performance_test;
@@ -25,7 +27,7 @@ async fn batch_update(
     version: &Version,
 ) -> Result<()> {
     for validator in validators_to_update {
-        ctx.swarm().upgrade_validator(*validator, version)?;
+        ctx.swarm().upgrade_validator(*validator, version).await?;
     }
 
     ctx.swarm().health_check().await?;

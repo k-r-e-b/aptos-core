@@ -19,6 +19,7 @@ const sidebars = {
     "index",
     "whats-new-in-docs",
     "guides/getting-started",
+
     {
       type: "category",
       label: "Aptos Quickstarts",
@@ -59,10 +60,16 @@ const sidebars = {
       items: [
         "guides/basics-life-of-txn",
         "guides/sign-a-transaction",
-        "guides/move-guides/move-on-aptos",
         "guides/interacting-with-the-blockchain",
         "guides/building-wallet-extension",
         "guides/guide-for-system-integrators",
+        "guides/local-testnet-dev-flow",
+        {
+          type: "category",
+          label: "Move Guides",
+          link: { type: "doc", id: "guides/move-guides/index" },
+          items: ["guides/move-guides/move-on-aptos", "guides/move-guides/guide-move-transactional-testing"],
+        },
       ],
     },
     {
@@ -114,7 +121,14 @@ const sidebars = {
             "nodes/full-node/run-a-fullnode-on-gcp",
           ],
         },
-        "nodes/run-a-local-testnet",
+        {
+          type: "category",
+          label: "Local Testnet",
+          link: { type: "doc", id: "nodes/local-testnet/index" },
+          collapsible: true,
+          collapsed: true,
+          items: ["nodes/local-testnet/using-cli-to-run-a-local-testnet", "nodes/local-testnet/run-a-local-testnet"],
+        },
         "nodes/node-health-checker",
         "nodes/node-health-checker-faq",
         "nodes/staking",
@@ -144,15 +158,8 @@ const sidebars = {
       link: { type: "doc", id: "cli-tools/aptos-cli-tool/index" },
       items: ["cli-tools/aptos-cli-tool/install-aptos-cli", "cli-tools/aptos-cli-tool/use-aptos-cli"],
     },
-    {
-      type: "category",
-      label: "API",
-      collapsible: true,
-      collapsed: true,
-      link: { type: "doc", id: "api/index" },
-      items: ["api/index"],
-    },
     "reference/telemetry",
+    "aptos-white-paper",
     "reference/glossary",
   ],
 };

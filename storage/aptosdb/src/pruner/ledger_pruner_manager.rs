@@ -25,9 +25,10 @@ use std::{
 /// The `PrunerManager` for `LedgerPruner`.
 #[derive(Debug)]
 pub struct LedgerPrunerManager {
+    pruner_enabled: bool,
     /// DB version window, which dictates how many version of other stores like transaction, ledger
     /// info, events etc to keep.
-    prune_window: Option<Version>,
+    prune_window: Version,
     /// Ledger pruner. Is always initialized regardless if the pruner is enabled to keep tracks
     /// of the min_readable_version.
     pruner: Arc<LedgerPruner>,
@@ -45,15 +46,34 @@ pub struct LedgerPrunerManager {
     pruning_batch_size: usize,
     /// latest version
     latest_version: Arc<Mutex<Version>>,
+    /// Offset for displaying to users
+    user_pruning_window_offset: u64,
 }
 
 impl PrunerManager for LedgerPrunerManager {
-    fn get_pruner_window(&self) -> Option<Version> {
+    fn is_pruner_enabled(&self) -> bool {
+        self.pruner_enabled
+    }
+
+    fn get_pruner_window(&self) -> Version {
         self.prune_window
     }
 
     fn get_min_readable_version(&self) -> Version {
         self.pruner.as_ref().min_readable_version()
+    }
+
+    fn get_min_viable_version(&self) -> Version {
+        let min_version = self.get_min_readable_version();
+        if self.is_pruner_enabled() {
+            let adjusted_window = self
+                .prune_window
+                .saturating_sub(self.user_pruning_window_offset);
+            let adjusted_cutoff = self.latest_version.lock().saturating_sub(adjusted_window);
+            std::cmp::max(min_version, adjusted_cutoff)
+        } else {
+            min_version
+        }
     }
 
     /// Sends pruning command to the worker thread when necessary.
@@ -62,7 +82,7 @@ impl PrunerManager for LedgerPrunerManager {
 
         // Only wake up the ledger pruner if there are `ledger_pruner_pruning_batch_size` pending
         // versions.
-        if self.prune_window.is_some()
+        if self.pruner_enabled
             && latest_version
                 >= *self.last_version_sent_to_pruner.as_ref().lock()
                     + self.pruning_batch_size as u64
@@ -72,14 +92,14 @@ impl PrunerManager for LedgerPrunerManager {
         }
     }
     fn wake_pruner(&self, latest_version: Version) {
-        assert!(self.prune_window.is_some());
+        assert!(self.pruner_enabled);
         assert!(self.command_sender.is_some());
         self.command_sender
             .as_ref()
             .unwrap()
             .lock()
             .send(db_pruner::Command::Prune {
-                target_db_version: latest_version.saturating_sub(self.prune_window.unwrap()),
+                target_db_version: latest_version.saturating_sub(self.prune_window),
             })
             .expect("Receiver should not destruct prematurely.");
     }
@@ -100,8 +120,8 @@ impl PrunerManager for LedgerPrunerManager {
             *self.last_version_sent_to_pruner.as_ref().lock() = latest_version;
         }
 
-        if self.prune_window.is_some() && latest_version > self.prune_window.unwrap() {
-            let min_readable_ledger_version = latest_version - self.prune_window.unwrap_or(0);
+        if self.pruner_enabled && latest_version > self.prune_window {
+            let min_readable_ledger_version = latest_version - self.prune_window;
 
             // Assuming no big pruning chunks will be issued by a test.
             const TIMEOUT: Duration = Duration::from_secs(10);
@@ -126,16 +146,18 @@ impl LedgerPrunerManager {
 
         let ledger_pruner = utils::create_ledger_pruner(ledger_db_clone);
 
-        PRUNER_WINDOW
-            .with_label_values(&["ledger_pruner"])
-            .set((storage_pruner_config.ledger_prune_window.unwrap_or(0)) as i64);
+        if storage_pruner_config.enable_ledger_pruner {
+            PRUNER_WINDOW
+                .with_label_values(&["ledger_pruner"])
+                .set(storage_pruner_config.ledger_prune_window as i64);
 
-        PRUNER_BATCH_SIZE
-            .with_label_values(&["ledger_pruner"])
-            .set(storage_pruner_config.ledger_pruning_batch_size as i64);
+            PRUNER_BATCH_SIZE
+                .with_label_values(&["ledger_pruner"])
+                .set(storage_pruner_config.ledger_pruning_batch_size as i64);
+        }
 
         let mut command_sender = None;
-        let ledger_pruner_worker_thread = if storage_pruner_config.ledger_prune_window.is_some() {
+        let ledger_pruner_worker_thread = if storage_pruner_config.enable_ledger_pruner {
             let (ledger_pruner_command_sender, ledger_pruner_command_receiver) = channel();
             command_sender = Some(Mutex::new(ledger_pruner_command_sender));
             let ledger_pruner_worker = LedgerPrunerWorker::new(
@@ -156,6 +178,7 @@ impl LedgerPrunerManager {
         let min_readable_version = ledger_pruner.min_readable_version();
 
         Self {
+            pruner_enabled: storage_pruner_config.enable_ledger_pruner,
             prune_window: storage_pruner_config.ledger_prune_window,
             pruner: ledger_pruner,
             worker_thread: ledger_pruner_worker_thread,
@@ -163,6 +186,7 @@ impl LedgerPrunerManager {
             last_version_sent_to_pruner: Arc::new(Mutex::new(min_readable_version)),
             pruning_batch_size: storage_pruner_config.ledger_pruning_batch_size,
             latest_version: Arc::new(Mutex::new(min_readable_version)),
+            user_pruning_window_offset: storage_pruner_config.user_pruning_window_offset,
         }
     }
 

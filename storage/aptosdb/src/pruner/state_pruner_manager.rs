@@ -34,9 +34,10 @@ use crate::utils;
 /// pending work to be done.
 #[derive(Debug)]
 pub struct StatePrunerManager {
+    pruner_enabled: bool,
     /// DB version window, which dictates how many versions of state store
     /// to keep.
-    prune_window: Option<Version>,
+    prune_window: Version,
     /// State pruner. Is always initialized regardless if the pruner is enabled to keep tracks
     /// of the min_readable_version.
     pruner: Arc<StateStorePruner>,
@@ -52,10 +53,16 @@ pub struct StatePrunerManager {
     last_version_sent_to_pruner: Arc<Mutex<Version>>,
     /// latest version
     latest_version: Arc<Mutex<Version>>,
+    /// Offset for displaying to users
+    user_pruning_window_offset: u64,
 }
 
 impl PrunerManager for StatePrunerManager {
-    fn get_pruner_window(&self) -> Option<Version> {
+    fn is_pruner_enabled(&self) -> bool {
+        self.pruner_enabled
+    }
+
+    fn get_pruner_window(&self) -> Version {
         self.prune_window
     }
 
@@ -63,26 +70,39 @@ impl PrunerManager for StatePrunerManager {
         self.pruner.as_ref().min_readable_version()
     }
 
+    fn get_min_viable_version(&self) -> Version {
+        let min_version = self.get_min_readable_version();
+        if self.is_pruner_enabled() {
+            let adjusted_window = self
+                .prune_window
+                .saturating_sub(self.user_pruning_window_offset);
+            let adjusted_cutoff = self.latest_version.lock().saturating_sub(adjusted_window);
+            std::cmp::max(min_version, adjusted_cutoff)
+        } else {
+            min_version
+        }
+    }
+
     /// Sends pruning command to the worker thread when necessary.
     fn maybe_wake_pruner(&self, latest_version: Version) {
         *self.latest_version.lock() = latest_version;
 
         // Always wake up the state pruner.
-        if self.prune_window.is_some() {
+        if self.pruner_enabled {
             self.wake_pruner(latest_version);
             *self.last_version_sent_to_pruner.as_ref().lock() = latest_version;
         }
     }
 
     fn wake_pruner(&self, latest_version: Version) {
-        assert!(self.prune_window.is_some());
+        assert!(self.pruner_enabled);
         assert!(self.command_sender.is_some());
         self.command_sender
             .as_ref()
             .unwrap()
             .lock()
             .send(db_pruner::Command::Prune {
-                target_db_version: latest_version.saturating_sub(self.prune_window.unwrap()),
+                target_db_version: latest_version.saturating_sub(self.prune_window),
             })
             .expect("Receiver should not destruct prematurely.");
     }
@@ -99,8 +119,8 @@ impl PrunerManager for StatePrunerManager {
         *self.latest_version.lock() = latest_version;
         self.wake_pruner(latest_version);
 
-        if self.prune_window.is_some() && latest_version > self.prune_window.unwrap() {
-            let min_readable_state_store_version = latest_version - self.prune_window.unwrap_or(0);
+        if self.pruner_enabled && latest_version > self.prune_window {
+            let min_readable_state_store_version = latest_version - self.prune_window;
 
             // Assuming no big pruning chunks will be issued by a test.
             const TIMEOUT: Duration = Duration::from_secs(10);
@@ -124,18 +144,19 @@ impl StatePrunerManager {
         let state_db_clone = Arc::clone(&state_merkle_rocksdb);
         let state_pruner = utils::create_state_pruner(state_db_clone);
 
-        PRUNER_WINDOW
-            .with_label_values(&["state_pruner"])
-            .set((storage_pruner_config.state_store_prune_window.unwrap_or(0)) as i64);
+        if storage_pruner_config.enable_state_store_pruner {
+            PRUNER_WINDOW
+                .with_label_values(&["state_pruner"])
+                .set(storage_pruner_config.state_store_prune_window as i64);
 
-        PRUNER_BATCH_SIZE
-            .with_label_values(&["state_store_pruner"])
-            .set(storage_pruner_config.state_store_pruning_batch_size as i64);
+            PRUNER_BATCH_SIZE
+                .with_label_values(&["state_store_pruner"])
+                .set(storage_pruner_config.state_store_pruning_batch_size as i64);
+        }
 
         let mut command_sender = None;
 
-        let state_pruner_worker_thread = if storage_pruner_config.state_store_prune_window.is_some()
-        {
+        let state_pruner_worker_thread = if storage_pruner_config.enable_state_store_pruner {
             let (state_pruner_command_sender, state_pruner_command_receiver) = channel();
             command_sender = Some(Mutex::new(state_pruner_command_sender));
             let state_pruner_worker = StatePrunerWorker::new(
@@ -155,12 +176,14 @@ impl StatePrunerManager {
 
         let min_readable_version = state_pruner.as_ref().min_readable_version();
         Self {
+            pruner_enabled: storage_pruner_config.enable_state_store_pruner,
             prune_window: storage_pruner_config.state_store_prune_window,
             pruner: state_pruner,
             worker_thread: state_pruner_worker_thread,
             command_sender,
             last_version_sent_to_pruner: Arc::new(Mutex::new(min_readable_version)),
             latest_version: Arc::new(Mutex::new(min_readable_version)),
+            user_pruning_window_offset: storage_pruner_config.user_pruning_window_offset,
         }
     }
 

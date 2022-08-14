@@ -1,9 +1,12 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{ChainInfo, FullNode, NodeExt, Result, SwarmChaos, Validator, Version};
+use crate::{
+    AptosPublicInfo, ChainInfo, FullNode, NodeExt, Result, SwarmChaos, Validator, Version,
+};
 use anyhow::{anyhow, bail};
 use aptos_config::config::NodeConfig;
+use aptos_logger::info;
 use aptos_rest_client::Client as RestClient;
 use aptos_sdk::types::PeerId;
 use futures::future::try_join_all;
@@ -31,7 +34,7 @@ pub trait Swarm: Sync {
     fn validator_mut(&mut self, id: PeerId) -> Option<&mut dyn Validator>;
 
     /// Upgrade a Validator to run specified `Version`
-    fn upgrade_validator(&mut self, id: PeerId, version: &Version) -> Result<()>;
+    async fn upgrade_validator(&mut self, id: PeerId, version: &Version) -> Result<()>;
 
     /// Returns an Iterator of references to all the FullNodes in the Swarm
     fn full_nodes<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn FullNode> + 'a>;
@@ -76,6 +79,9 @@ pub trait Swarm: Sync {
     fn inject_chaos(&mut self, chaos: SwarmChaos) -> Result<()>;
     fn remove_chaos(&mut self, chaos: SwarmChaos) -> Result<()>;
 
+    async fn ensure_no_validator_restart(&mut self) -> Result<()>;
+    async fn ensure_no_fullnode_restart(&mut self) -> Result<()>;
+
     // Get prometheus metrics from the swarm
     async fn query_metrics(
         &self,
@@ -83,6 +89,10 @@ pub trait Swarm: Sync {
         time: Option<i64>,
         timeout: Option<i64>,
     ) -> Result<PromqlResult>;
+
+    fn aptos_public_info(&mut self) -> AptosPublicInfo<'_> {
+        self.chain_info().into_aptos_public_info()
+    }
 }
 
 impl<T: ?Sized> SwarmExt for T where T: Swarm {}
@@ -113,7 +123,7 @@ pub trait SwarmExt: Swarm {
 
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-
+        info!("Swarm liveness check passed");
         Ok(())
     }
 
@@ -138,7 +148,7 @@ pub trait SwarmExt: Swarm {
 
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-
+        info!("Swarm connectivity check passed");
         Ok(())
     }
 

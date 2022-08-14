@@ -102,7 +102,7 @@ set_image_tag() {
             exit 1
         fi
     else
-        img=$(aws ecr describe-images --repository-name="aptos/validator" --image-ids=imageTag=$IMAGE_TAG)
+        img=$(aws ecr describe-images --repository-name="aptos/validator" --image-ids=imageTag=$IMAGE_TAG 2>/dev/null)
         if [ "$?" -ne 0 ]; then
             echo "IMAGE_TAG does not exist in ECR: ${IMAGE_TAG}. Make sure your commit has been pushed to GitHub previously."
             echo "If you're trying to run the code from your PR, apply the label 'CICD:build-images' and wait for the builds to finish."
@@ -164,6 +164,9 @@ HUMIO_LOGS_LINK="https://cloud.us.humio.com/k8s/search?query=%24forgeLogs%28vali
 
 # set the image tag in IMAGE_TAG
 set_image_tag
+if [ -z "$UPGRADE_IMAGE_TAG" ]; then
+    UPGRADE_IMAGE_TAG=$IMAGE_TAG
+fi
 
 # set the o11y resource locations in
 # ES_DEFAULT_INDEX, ES_BASE_URL, GRAFANA_BASE_URL
@@ -190,10 +193,15 @@ if [ "$FORGE_RUNNER_MODE" = "local" ]; then
     # more file descriptors for heavy txn generation
     ulimit -n 1048576
 
+    # port-forward prometheus
+    kubectl port-forward -n default svc/aptos-node-mon-aptos-monitoring-prometheus 9090:9090 >/dev/null 2>&1 &
+    prometheus_port_forward_pid=$!
+
     cargo run -p forge-cli -- --suite $FORGE_TEST_SUITE --mempool-backlog 5000 --avg-tps $FORGE_RUNNER_TPS_THRESHOLD \
         --max-latency-ms $LOCAL_P99_LATENCY_MS_THRESHOLD --duration-secs $FORGE_RUNNER_DURATION_SECS \
         test k8s-swarm \
         --image-tag $IMAGE_TAG \
+        --upgrade-image-tag $UPGRADE_IMAGE_TAG \
         --namespace $FORGE_NAMESPACE \
         --port-forward $REUSE_ARGS $KEEP_ARGS $ENABLE_HAPROXY_ARGS | tee $FORGE_OUTPUT
 
@@ -202,6 +210,7 @@ if [ "$FORGE_RUNNER_MODE" = "local" ]; then
     # try to kill orphaned port-forwards
     if [ -z "$KEEP_ARGS" ]; then
         ps -A | grep "kubectl port-forward -n $FORGE_NAMESPACE" | awk '{ print $1 }' | xargs -I{} kill -9 {}
+        kill -9 $prometheus_port_forward_pid
     fi
 
 elif [ "$FORGE_RUNNER_MODE" = "k8s" ]; then
@@ -222,6 +231,7 @@ elif [ "$FORGE_RUNNER_MODE" = "k8s" ]; then
         -e "s/{FORGE_RUNNER_DURATION_SECS}/${FORGE_RUNNER_DURATION_SECS}/g" \
         -e "s/{FORGE_RUNNER_TPS_THRESHOLD}/${FORGE_RUNNER_TPS_THRESHOLD}/g" \
         -e "s/{IMAGE_TAG}/${IMAGE_TAG}/g" \
+        -e "s/{UPGRADE_IMAGE_TAG}/${UPGRADE_IMAGE_TAG}/g" \
         -e "s/{AWS_ACCOUNT_NUM}/${AWS_ACCOUNT_NUM}/g" \
         -e "s/{AWS_REGION}/${AWS_REGION}/g" \
         -e "s/{FORGE_NAMESPACE}/${FORGE_NAMESPACE}/g" \
@@ -237,7 +247,13 @@ elif [ "$FORGE_RUNNER_MODE" = "k8s" ]; then
     kubectl wait -n default --timeout=5m --for=condition=Ready "pod/${FORGE_POD_NAME}"
 
     # tail the logs and tee them for further parsing
+    echo "=====START FORGE LOGS====="
     kubectl logs -n default -f $FORGE_POD_NAME | tee $FORGE_OUTPUT
+    echo "=====END FORGE COMMENT====="
+
+    # wait for the pod status to change potentially
+    sleep 10
+    while [[ $(kubectl get pods $FORGE_POD_NAME -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') == "True" ]]; do echo "waiting for pod to complete: $FORGE_POD_NAME" && sleep 1; done
 
     # parse the pod status: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
     forge_pod_status=$(kubectl get pod -n default $FORGE_POD_NAME -o jsonpath="{.status.phase}" 2>&1)
@@ -245,7 +261,7 @@ elif [ "$FORGE_RUNNER_MODE" = "k8s" ]; then
 
     if [ "$forge_pod_status" = "Succeeded" ]; then # the current pod succeeded
         FORGE_EXIT_CODE=0
-    elif echo $forge_pod_status | grep -E "(not found)|(NotFound)"; then # the current test in this namespace was likely preempted and deleted
+    elif echo $forge_pod_status | grep -E "(not found)|(NotFound)|(No such)"; then # the current test in this namespace was likely preempted and deleted
         FORGE_EXIT_CODE=10
     else # it did not succeed
         FORGE_EXIT_CODE=1

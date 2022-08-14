@@ -1,8 +1,7 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use super::golden_output::GoldenOutputs;
-use super::pretty;
+use super::{golden_output::GoldenOutputs, pretty};
 use crate::{
     context::Context, index, poem_backend::attach_poem_to_runtime, runtime::get_routes_with_poem,
 };
@@ -18,7 +17,7 @@ use aptos_mempool::mocks::MockSharedMempool;
 use aptos_sdk::{
     transaction_builder::TransactionFactory,
     types::{
-        account_config::aptos_root_address, transaction::SignedTransaction, AccountKey,
+        account_config::aptos_test_root_address, transaction::SignedTransaction, AccountKey,
         LocalAccount,
     },
 };
@@ -42,9 +41,10 @@ use storage_interface::DbReaderWriter;
 
 use aptos_config::keys::ConfigKey;
 use aptos_crypto::ed25519::Ed25519PrivateKey;
+use aptos_types::multi_signature::MultiSignature;
 use rand::SeedableRng;
 use serde_json::{json, Value};
-use std::{boxed::Box, collections::BTreeMap, iter::once, net::SocketAddr, sync::Arc};
+use std::{boxed::Box, iter::once, net::SocketAddr, sync::Arc};
 use storage_interface::state_view::DbStateView;
 use vm_validator::vm_validator::VMValidator;
 use warp::http::header::CONTENT_TYPE;
@@ -238,7 +238,7 @@ impl TestContext {
     }
 
     pub fn root_account(&self) -> LocalAccount {
-        LocalAccount::new(aptos_root_address(), self.root_key.private_key(), 0)
+        LocalAccount::new(aptos_test_root_address(), self.root_key.private_key(), 0)
     }
 
     pub fn latest_state_view(&self) -> DbStateView {
@@ -370,26 +370,9 @@ impl TestContext {
             ))
             .await;
         let vals: Vec<serde_json::Value> = serde_json::from_value(resources).unwrap();
-        match self.api_specific_config {
-            ApiSpecificConfig::V0 => vals
-                .into_iter()
-                .find(|v| {
-                    v["type"] == format!("{}::{}::{}", resource_account_address, module, name,)
-                })
-                .unwrap(),
-            ApiSpecificConfig::V1(_) => vals
-                .into_iter()
-                .find(|v| {
-                    v["type"]
-                        == json!({
-                            "address": resource_account_address,
-                            "module": module,
-                            "name": name,
-                            "generic_type_params": []
-                        })
-                })
-                .unwrap(),
-        }
+        vals.into_iter()
+            .find(|v| v["type"] == format!("{}::{}::{}", resource_account_address, module, name,))
+            .unwrap()
     }
 
     pub async fn api_execute_script_function(
@@ -400,32 +383,16 @@ impl TestContext {
         type_args: serde_json::Value,
         args: serde_json::Value,
     ) {
-        let (typ, function) = match self.api_specific_config {
-            ApiSpecificConfig::V0 => (
-                "script_function_payload",
-                json!(format!(
+        self.api_execute_txn(
+            account,
+            json!({
+                "type": "script_function_payload",
+                "function": format!(
                     "{}::{}::{}",
                     account.address().to_hex_literal(),
                     module,
                     func
-                )),
-            ),
-            ApiSpecificConfig::V1(_) => (
-                "script_function_payload",
-                json!({
-                    "module": json!({
-                        "address": account.address().to_hex_literal(),
-                        "name": module,
-                    }),
-                    "name": func,
-                }),
-            ),
-        };
-        self.api_execute_txn(
-            account,
-            json!({
-                "type": typ,
-                "function": function,
+                ),
                 "type_arguments": type_args,
                 "arguments": args
             }),
@@ -452,7 +419,6 @@ impl TestContext {
             "sequence_number": account.sequence_number().to_string(),
             "gas_unit_price": "0",
             "max_gas_amount": "1000000",
-            "gas_currency_code": "XUS",
             "expiration_timestamp_secs": "16373698888888",
             "payload": payload,
         });
@@ -472,12 +438,8 @@ impl TestContext {
             .private_key()
             .sign_arbitrary_message(signing_msg.inner());
 
-        let typ = match self.api_specific_config {
-            ApiSpecificConfig::V0 => "ed25519_signature",
-            ApiSpecificConfig::V1(_) => "ed_25519_signature",
-        };
         request["signature"] = json!({
-            "type": typ,
+            "type": "ed25519_signature",
             "public_key": HexEncodedBytes::from(account.public_key().to_bytes().to_vec()),
             "signature": HexEncodedBytes::from(sig.to_bytes().to_vec()),
         });
@@ -575,7 +537,7 @@ impl TestContext {
             round,
             self.validator_owner,
             Some(0),
-            vec![false],
+            vec![0],
             vec![],
             timestamp,
         )
@@ -605,6 +567,6 @@ impl TestContext {
             ),
             HashValue::zero(),
         );
-        LedgerInfoWithSignatures::new(info, BTreeMap::new())
+        LedgerInfoWithSignatures::new(info, MultiSignature::empty())
     }
 }
