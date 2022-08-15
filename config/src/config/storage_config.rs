@@ -125,8 +125,8 @@ impl Default for StoragePrunerConfig {
         StoragePrunerConfig {
             enable_state_store_pruner: true,
             enable_ledger_pruner: true,
-            state_store_prune_window: 1_000_000,
-            ledger_prune_window: 10_000_000,
+            state_store_prune_window: 80_000_000,
+            ledger_prune_window: 150_000_000,
             ledger_pruning_batch_size: 500,
             // A 10k transaction block (touching 60k state values, in the case of the account
             // creation benchmark) on a 4B items DB (or 1.33B accounts) yields 300k JMT nodes
