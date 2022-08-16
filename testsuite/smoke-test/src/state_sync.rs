@@ -20,6 +20,7 @@ use std::{
 };
 
 const MAX_CATCH_UP_SECS: u64 = 120; // The max time we'll wait for nodes to catch up
+const NETWORK_FRAME_LIMIT: u64 = 10 * 1024; // 10KB
 
 #[tokio::test]
 async fn test_full_node_bootstrap_state_snapshot() {
@@ -219,7 +220,7 @@ async fn test_full_node_sync(vfn_peer_id: PeerId, swarm: &mut LocalSwarm, epoch_
 
 #[tokio::test]
 async fn test_validator_bootstrap_outputs() {
-    // Create a swarm of 4 validators with state sync v2 enabled (output syncing)
+    // Create a swarm of 4 validators using output syncing
     let mut swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
@@ -237,7 +238,7 @@ async fn test_validator_bootstrap_outputs() {
 
 #[tokio::test]
 async fn test_validator_bootstrap_state_snapshot() {
-    // Create a swarm of 4 validators with state sync v2 enabled (snapshot syncing, chunk size = 1)
+    // Create a swarm of 4 validators using snapshot syncing and a chunk size = 1
     let mut swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
@@ -260,8 +261,65 @@ async fn test_validator_bootstrap_state_snapshot() {
 }
 
 #[tokio::test]
+async fn test_validator_bootstrap_outputs_network_limit() {
+    // Create a swarm of 4 validators using output syncing and an aggressive network limit
+    let mut swarm = SwarmBuilder::new_local(4)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, config, _| {
+            config.state_sync.state_sync_driver.bootstrapping_mode =
+                BootstrappingMode::ApplyTransactionOutputsFromGenesis;
+            config.state_sync.state_sync_driver.continuous_syncing_mode =
+                ContinuousSyncingMode::ApplyTransactionOutputs;
+            config.state_sync.storage_service.max_network_chunk_bytes = NETWORK_FRAME_LIMIT;
+        }))
+        .build()
+        .await;
+
+    // Test the ability of the validators to sync
+    test_validator_sync(&mut swarm, 1).await;
+}
+
+#[tokio::test]
+async fn test_validator_bootstrap_state_snapshot_no_compression() {
+    // Create a swarm of 4 validators using state snapshot syncing
+    let mut swarm = SwarmBuilder::new_local(4)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, config, _| {
+            config.state_sync.state_sync_driver.bootstrapping_mode =
+                BootstrappingMode::DownloadLatestStates;
+            config.state_sync.state_sync_driver.continuous_syncing_mode =
+                ContinuousSyncingMode::ApplyTransactionOutputs;
+            config.state_sync.aptos_data_client.use_compression = false;
+        }))
+        .build()
+        .await;
+
+    // Test the ability of the validators to sync
+    test_validator_sync(&mut swarm, 1).await;
+}
+
+#[tokio::test]
+async fn test_validator_bootstrap_state_snapshot_network_limit() {
+    // Create a swarm of 4 validators using state snapshot syncing and an aggressive network limit
+    let mut swarm = SwarmBuilder::new_local(4)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, config, _| {
+            config.state_sync.state_sync_driver.bootstrapping_mode =
+                BootstrappingMode::DownloadLatestStates;
+            config.state_sync.state_sync_driver.continuous_syncing_mode =
+                ContinuousSyncingMode::ExecuteTransactions;
+            config.state_sync.storage_service.max_network_chunk_bytes = NETWORK_FRAME_LIMIT * 2;
+        }))
+        .build()
+        .await;
+
+    // Test the ability of the validators to sync
+    test_validator_sync(&mut swarm, 1).await;
+}
+
+#[tokio::test]
 async fn test_validator_bootstrap_transactions() {
-    // Create a swarm of 4 validators with state sync v2 enabled (transaction syncing)
+    // Create a swarm of 4 validators using transaction syncing
     let mut swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
@@ -278,8 +336,27 @@ async fn test_validator_bootstrap_transactions() {
 }
 
 #[tokio::test]
+async fn test_validator_bootstrap_transactions_network_limit() {
+    // Create a swarm of 4 validators using transaction syncing and an aggressive network limit
+    let mut swarm = SwarmBuilder::new_local(4)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, config, _| {
+            config.state_sync.state_sync_driver.bootstrapping_mode =
+                BootstrappingMode::ExecuteTransactionsFromGenesis;
+            config.state_sync.state_sync_driver.continuous_syncing_mode =
+                ContinuousSyncingMode::ExecuteTransactions;
+            config.state_sync.storage_service.max_network_chunk_bytes = NETWORK_FRAME_LIMIT;
+        }))
+        .build()
+        .await;
+
+    // Test the ability of the validators to sync
+    test_validator_sync(&mut swarm, 1).await;
+}
+
+#[tokio::test]
 async fn test_validator_bootstrap_transactions_no_compression() {
-    // Create a swarm of 4 validators with state sync v2 enabled (transaction syncing, no compression)
+    // Create a swarm of 4 validators using transaction syncing and no compression
     let mut swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
@@ -327,8 +404,7 @@ async fn test_validator_sync(swarm: &mut LocalSwarm, validator_index_to_test: us
 
 #[tokio::test]
 async fn test_validator_failure_bootstrap_outputs() {
-    // Create a swarm of 4 validators with state sync v2 enabled (snapshot
-    // bootstrapping and transaction output application).
+    // Create a swarm of 4 validators with state snapshot bootstrapping and output syncing
     let swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
@@ -346,8 +422,7 @@ async fn test_validator_failure_bootstrap_outputs() {
 
 #[tokio::test]
 async fn test_validator_failure_bootstrap_execution() {
-    // Create a swarm of 4 validators with state sync v2 enabled (snapshot
-    // bootstrapping and transaction execution).
+    // Create a swarm of 4 validators with state snapshot bootstrapping and transaction syncing
     let swarm = SwarmBuilder::new_local(4)
         .with_aptos()
         .with_init_config(Arc::new(|_, config, _| {
