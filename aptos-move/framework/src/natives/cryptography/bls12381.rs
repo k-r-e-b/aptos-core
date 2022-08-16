@@ -65,12 +65,10 @@ impl GasParameters {
         let mut pks = vec![];
 
         for pk_bytes in pks_serialized {
-            *cost += self.per_pubkey_deserialize_cost;
-
-            let pk = match bls12381::PublicKey::try_from(&pk_bytes[..]) {
-                Ok(key) => key,
+            let pk = match self.bls12381_deserialize_pk(pk_bytes, cost) {
+                Some(key) => key,
                 // If PK does not deserialize correctly, break early
-                Err(_) => break,
+                None => break,
             };
 
             pks.push(pk);
@@ -89,7 +87,7 @@ impl GasParameters {
 
         match bls12381::PublicKey::try_from(&pk_bytes[..]) {
             Ok(key) => Some(key),
-            // If PK does not deserialize correctly, break early
+            // If PK does not deserialize correctly, return None
             Err(_) => None,
         }
     }
@@ -103,15 +101,13 @@ impl GasParameters {
         let mut sigs = vec![];
 
         for sig_bytes in sigs_serialized {
-            *cost += self.per_sig_deserialize_cost;
-
-            let pk = match bls12381::Signature::try_from(&sig_bytes[..]) {
-                Ok(sig) => sig,
+            let sig = match self.bls12381_deserialize_sig(sig_bytes, cost) {
+                Some(sig) => sig,
                 // If sig does not deserialize correctly, break early
-                Err(_) => break,
+                None => break,
             };
 
-            sigs.push(pk);
+            sigs.push(sig);
         }
 
         sigs
@@ -127,7 +123,7 @@ impl GasParameters {
 
         match bls12381::Signature::try_from(&sig_bytes[..]) {
             Ok(sig) => Some(sig),
-            // If PK does not deserialize correctly, break early
+            // If PK does not deserialize correctly, return None
             Err(_) => None,
         }
     }
