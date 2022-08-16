@@ -4,7 +4,8 @@
 //! A crate which extends Move with a RistrettoPoint struct that points to a Rust-native
 //! curve25519_dalek::ristretto::RistrettoPoint.
 
-use crate::natives::ristretto255_scalar::scalar_from_valid_bytes;
+use crate::natives::cryptography::ristretto255::GasParameters;
+use crate::natives::cryptography::ristretto255_scalar::scalar_from_valid_bytes;
 use better_any::{Tid, TidAble};
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::traits::Identity;
@@ -131,16 +132,33 @@ impl PointStore {
     }
 }
 
-// =========================================================================================
-// Native Function Implementations
+//
+// Parital implementation of GasParameters for point operations
+//
 
-#[derive(Debug, Clone)]
-pub struct PointIdentityGasParameters {
-    pub base_cost: u64,
+impl GasParameters {
+    /// If 'bytes' canonically-encode a valid RistrettoPoint, returns the point.  Otherwise, returns None.
+    fn decompress_maybe_non_canonical_point_bytes(
+        &self,
+        cumulative_cost: &mut u64,
+        bytes: Vec<u8>,
+    ) -> Option<RistrettoPoint> {
+        let compressed = match compressed_point_from_bytes(bytes) {
+            None => return None,
+            Some(point) => point,
+        };
+
+        *cumulative_cost += self.point_decompress_cost;
+        compressed.decompress()
+    }
 }
 
+//
+// Native function implementations for point operations
+//
+
 pub(crate) fn native_point_identity(
-    gas_params: &PointIdentityGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     args: VecDeque<Value>,
@@ -148,7 +166,7 @@ pub(crate) fn native_point_identity(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 0);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_identity_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let mut point_data = point_context.point_data.borrow_mut();
@@ -158,14 +176,8 @@ pub(crate) fn native_point_identity(
     Ok(NativeResult::ok(cost, smallvec![Value::u64(result_handle)]))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointIsCanonicalGasParameters {
-    pub base_cost: u64,
-    pub is_canonical_cost: u64,
-}
-
 pub(crate) fn native_point_is_canonical(
-    gas_params: &PointIsCanonicalGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -177,8 +189,7 @@ pub(crate) fn native_point_is_canonical(
 
     let bytes = pop_arg!(args, Vec<u8>);
 
-    let opt_point =
-        decompress_maybe_non_canonical_point_bytes(&mut cost, gas_params.is_canonical_cost, bytes);
+    let opt_point = gas_params.decompress_maybe_non_canonical_point_bytes(&mut cost, bytes);
 
     Ok(NativeResult::ok(
         cost,
@@ -186,14 +197,8 @@ pub(crate) fn native_point_is_canonical(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointDecompressGasParameters {
-    pub base_cost: u64,
-    pub decompress_cost: u64,
-}
-
 pub(crate) fn native_point_decompress(
-    gas_params: &PointDecompressGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -208,11 +213,7 @@ pub(crate) fn native_point_decompress(
 
     let bytes = pop_arg!(args, Vec<u8>);
 
-    let point = match decompress_maybe_non_canonical_point_bytes(
-        &mut cost,
-        gas_params.decompress_cost,
-        bytes,
-    ) {
+    let point = match gas_params.decompress_maybe_non_canonical_point_bytes(&mut cost, bytes) {
         Some(point) => point,
         None => {
             // NOTE: We return (u64::MAX, false) in this case.
@@ -234,13 +235,8 @@ pub(crate) fn native_point_decompress(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointCompressGasParameters {
-    pub base_cost: u64,
-}
-
 pub(crate) fn native_point_compress(
-    gas_params: &PointCompressGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -248,7 +244,7 @@ pub(crate) fn native_point_compress(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 1);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_compress_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let mut point_data = point_context.point_data.borrow_mut();
@@ -263,13 +259,8 @@ pub(crate) fn native_point_compress(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointMulGasParameters {
-    pub base_cost: u64,
-}
-
 pub(crate) fn native_point_mul(
-    gas_params: &PointMulGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -277,7 +268,7 @@ pub(crate) fn native_point_mul(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 3);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_mul_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let mut point_data = point_context.point_data.borrow_mut();
@@ -304,13 +295,8 @@ pub(crate) fn native_point_mul(
     Ok(NativeResult::ok(cost, smallvec![Value::u64(result_handle)]))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointEqualsGasParameters {
-    pub base_cost: u64,
-}
-
 pub(crate) fn native_point_equals(
-    gas_params: &PointEqualsGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -318,7 +304,7 @@ pub(crate) fn native_point_equals(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 2);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_equals_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let point_data = point_context.point_data.borrow_mut();
@@ -333,13 +319,8 @@ pub(crate) fn native_point_equals(
     Ok(NativeResult::ok(cost, smallvec![Value::bool(a.eq(b))]))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointNegGasParameters {
-    pub base_cost: u64,
-}
-
 pub(crate) fn native_point_neg(
-    gas_params: &PointNegGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -347,7 +328,7 @@ pub(crate) fn native_point_neg(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 2);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_neg_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let mut point_data = point_context.point_data.borrow_mut();
@@ -371,13 +352,8 @@ pub(crate) fn native_point_neg(
     Ok(NativeResult::ok(cost, smallvec![Value::u64(result_handle)]))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointAddGasParameters {
-    pub base_cost: u64,
-}
-
 pub(crate) fn native_point_add(
-    gas_params: &PointAddGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -385,7 +361,7 @@ pub(crate) fn native_point_add(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 3);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_add_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let mut point_data = point_context.point_data.borrow_mut();
@@ -418,13 +394,8 @@ pub(crate) fn native_point_add(
     Ok(NativeResult::ok(cost, smallvec![Value::u64(result_handle)]))
 }
 
-#[derive(Debug, Clone)]
-pub struct PointSubGasParameters {
-    pub base_cost: u64,
-}
-
 pub(crate) fn native_point_sub(
-    gas_params: &PointSubGasParameters,
+    gas_params: &GasParameters,
     context: &mut NativeContext,
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -432,7 +403,7 @@ pub(crate) fn native_point_sub(
     assert_eq!(ty_args.len(), 0);
     assert_eq!(args.len(), 3);
 
-    let cost = gas_params.base_cost;
+    let cost = gas_params.base_cost + gas_params.point_sub_cost;
 
     let point_context = context.extensions().get::<NativeRistrettoPointContext>();
     let mut point_data = point_context.point_data.borrow_mut();
@@ -488,19 +459,4 @@ fn compressed_point_from_bytes(bytes: Vec<u8>) -> Option<CompressedRistretto> {
             None
         }
     }
-}
-
-/// If 'bytes' canonically-encode a valid RistrettoPoint, returns the point.  Otherwise, returns None.
-fn decompress_maybe_non_canonical_point_bytes(
-    cumulative_cost: &mut u64,
-    op_cost: u64,
-    bytes: Vec<u8>,
-) -> Option<RistrettoPoint> {
-    let compressed = match compressed_point_from_bytes(bytes) {
-        None => return None,
-        Some(point) => point,
-    };
-
-    *cumulative_cost += op_cost;
-    compressed.decompress()
 }

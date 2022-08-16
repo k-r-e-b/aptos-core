@@ -33,7 +33,7 @@
 ///      + Similar to the CompressedRistretto and RistrettoPoint structs in this module
 ///      + The challenge is that curve25519-dalek's RistrettoBasepointTable is not serializable
 
-module cryptography::ristretto255 {
+module aptos_std::ristretto255 {
     use std::option::Option;
     use std::bit_vector::BitVector;
 

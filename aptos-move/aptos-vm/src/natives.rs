@@ -4,7 +4,7 @@
 use crate::move_vm_ext::{aggregator_natives, NativeAggregatorContext};
 use aptos_gas::NativeGasParameters;
 use aptos_types::account_config::CORE_CODE_ADDRESS;
-use framework::natives::ristretto255_point::NativeRistrettoPointContext;
+use framework::natives::cryptography::ristretto255_point::NativeRistrettoPointContext;
 use framework::natives::{code::NativeCodeContext, transaction_context::NativeTransactionContext};
 use move_deps::move_unit_test;
 use move_deps::move_vm_runtime::native_extensions::NativeContextExtensions;

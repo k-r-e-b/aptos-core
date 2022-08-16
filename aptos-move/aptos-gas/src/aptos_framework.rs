@@ -31,58 +31,27 @@ crate::natives::define_gas_parameters_for_natives!(GasParameters, "aptos_framewo
     [.bit_vector.big_endian_bitvector_from_byte_vector.base_cost, "bit_vector.big_endian_bitvector_from_byte_vector.base", 1],
     [.bit_vector.big_endian_bitvector_from_byte_vector.per_byte_cost, "bit_vector.big_endian_bitvector_from_byte_vector.per_byte", 1],
 
-    [.ristretto255.point_is_canonical.base_cost, "cryptography.ristretto255.point_is_canonical.base", 1],
-    [.ristretto255.point_is_canonical.is_canonical_cost, "cryptography.point_is_canonical.is_canonical", 1],
+    [.ristretto255.base_cost, "ristretto255.base", 1],
+    [.ristretto255.point_add_cost, "ristretto255.point_add", 1],
+    [.ristretto255.point_compress_cost, "ristretto255.point_compress", 1],
+    [.ristretto255.point_decompress_cost, "ristretto255.point_decompress", 1],
+    [.ristretto255.point_equals_cost, "ristretto255.point_equals", 1],
+    [.ristretto255.point_identity_cost, "ristretto255.point_identity", 1],
+    [.ristretto255.point_mul_cost, "ristretto255.point_mul", 1],
+    [.ristretto255.point_neg_cost, "ristretto255.point_neg", 1],
+    [.ristretto255.point_sub_cost, "ristretto255.point_sub", 1],
 
-    [.ristretto255.point_identity.base_cost, "cryptography.ristretto255.point_identity.base", 1 ],
-
-    [.ristretto255.point_decompress.base_cost, "cryptography.ristretto255.point_decompress.base", 1 ],
-    [.ristretto255.point_decompress.decompress_cost, "cryptography.ristretto255.point_decompress.decompress", 1 ],
-
-    [.ristretto255.point_compress.base_cost, "cryptography.ristretto255.point_compress.base", 1 ],
-
-    [.ristretto255.point_mul.base_cost, "cryptography.ristretto255.point_mul.base", 1 ],
-
-    [.ristretto255.point_equals.base_cost, "cryptography.ristretto255.point_equals.base", 1 ],
-
-    [.ristretto255.point_neg.base_cost, "cryptography.ristretto255.point_neg.base", 1 ],
-
-    [.ristretto255.point_add.base_cost, "cryptography.ristretto255.point_add.base", 1 ],
-    [.ristretto255.point_sub.base_cost, "cryptography.ristretto255.point_add.base", 1 ],
-
-    [.ristretto255.scalar_is_canonical.base_cost, "cryptography.ristretto255.scalar_is_canonical.base", 1],
-    [.ristretto255.scalar_is_canonical.per_scalar_deserialize_cost, "cryptography.ristretto255.scalar_is_canonical.per_scalar_deserialize", 1],
-
-    [.ristretto255.scalar_invert.base_cost, "cryptography.ristretto255.scalar_invert.base", 1],
-    [.ristretto255.scalar_invert.per_scalar_invert_cost, "cryptography.ristretto255.scalar_invert.per_scalar_invert", 1],
-
-    [.ristretto255.scalar_from_sha512.base_cost, "cryptography.ristretto255.scalar_from_sha512.base", 1],
-    [.ristretto255.scalar_from_sha512.per_hash_sha512_cost, "cryptography.ristretto255.scalar_from_sha512.per_hash_sha512", 1],
-    [.ristretto255.scalar_from_sha512.per_byte_sha512_cost, "cryptography.ristretto255.scalar_from_sha512.per_byte_sha512", 1],
-
-    [.ristretto255.scalar_mul.base_cost, "cryptography.ristretto255.scalar_mul.base", 1],
-    [.ristretto255.scalar_mul.mul_cost, "cryptography.ristretto255.scalar_mul.mul", 1],
-
-    [.ristretto255.scalar_add.base_cost, "cryptography.ristretto255.scalar_add.base", 1],
-    [.ristretto255.scalar_add.add_cost, "cryptography.ristretto255.scalar_add.add", 1],
-
-    [.ristretto255.scalar_sub.base_cost, "cryptography.ristretto255.scalar_sub.base", 1],
-    [.ristretto255.scalar_sub.sub_cost, "cryptography.ristretto255.scalar_sub.sub", 1],
-
-    [.ristretto255.scalar_neg.base_cost, "cryptography.ristretto255.scalar_neg.base", 1],
-    [.ristretto255.scalar_neg.neg_cost, "cryptography.ristretto255.scalar_neg.neg", 1],
-
-    [.ristretto255.scalar_from_u64.base_cost, "cryptography.ristretto255.scalar_from_u64.base", 1],
-    [.ristretto255.scalar_from_u64.from_u64_cost, "cryptography.ristretto255.scalar_from_u64.from_u64", 1],
-
-    [.ristretto255.scalar_from_u128.base_cost, "cryptography.ristretto255.scalar_from_u128.base", 1],
-    [.ristretto255.scalar_from_u128.from_u128_cost, "cryptography.ristretto255.scalar_from_u128.from_u128", 1],
-
-    [.ristretto255.scalar_from_256_bits.base_cost, "cryptography.ristretto255.scalar_from_256_bits.base", 1],
-    [.ristretto255.scalar_from_256_bits.from_256_bits_cost, "cryptography.ristretto255.scalar_from_256_bits.from_256_bits", 1],
-
-    [.ristretto255.scalar_from_512_bits.base_cost, "cryptography.ristretto255.scalar_from_512_bits.base", 1],
-    [.ristretto255.scalar_from_512_bits.from_512_bits_cost, "cryptography.ristretto255.scalar_from_512_bits.from_512_bits", 1],
+    [.ristretto255.scalar_add_cost, "ristretto255.scalar_add", 1],
+    [.ristretto255.scalar_from_512_bits_cost, "ristretto255.scalar_from_512_bits", 1],
+    [.ristretto255.scalar_from_u128_cost, "ristretto255.scalar_from_u128", 1],
+    [.ristretto255.scalar_from_u64_cost, "ristretto255.scalar_from_u64", 1],
+    [.ristretto255.scalar_invert_cost, "ristretto255.scalar_invert", 1],
+    [.ristretto255.scalar_is_canonical_cost, "ristretto255.scalar_is_canonical", 1],
+    [.ristretto255.scalar_mul_cost, "ristretto255.scalar_mul", 1],
+    [.ristretto255.scalar_neg_cost, "ristretto255.scalar_neg", 1],
+    [.ristretto255.scalar_sha512_per_byte_cost, "ristretto255.scalar_sha512_per_byte", 1],
+    [.ristretto255.scalar_sha512_per_hash_cost, "ristretto255.scalar_sha512_per_hash", 1],
+    [.ristretto255.scalar_sub_cost, "ristretto255.scalar_sub", 1],
 
     [.signature.ed25519_validate_pubkey.base_cost, "signature.ed25519_validate_pubkey.base", 1],
     [.signature.ed25519_validate_pubkey.per_pubkey_deserialize_cost, "signature.ed25519_validate_pubkey.per_pubkey_deserialize", 1],

@@ -1,6 +1,7 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::natives::cryptography::ristretto255::GasParameters;
 use curve25519_dalek::scalar::Scalar;
 use move_deps::{
     move_binary_format::errors::PartialVMResult,
@@ -28,14 +29,8 @@ pub fn scalar_from_valid_bytes(bytes: Vec<u8>) -> Scalar {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarIsCanonicalGasParameters {
-    pub base_cost: u64,
-    pub per_scalar_deserialize_cost: u64,
-}
-
 pub(crate) fn native_scalar_is_canonical(
-    gas_params: &ScalarIsCanonicalGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -53,20 +48,14 @@ pub(crate) fn native_scalar_is_canonical(
     };
 
     let s = Scalar::from_canonical_bytes(bytes_slice);
-    cost += gas_params.per_scalar_deserialize_cost;
+    cost += gas_params.scalar_is_canonical_cost;
 
     // TODO: Speed up this implementation using bit testing on 'bytes'?
     Ok(NativeResult::ok(cost, smallvec![Value::bool(s.is_some())]))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarInvertGasParameters {
-    pub base_cost: u64,
-    pub per_scalar_invert_cost: u64,
-}
-
 pub(crate) fn native_scalar_invert(
-    gas_params: &ScalarInvertGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -84,22 +73,15 @@ pub(crate) fn native_scalar_invert(
     debug_assert!(s.is_canonical());
 
     // Invert and return
-    cost += gas_params.per_scalar_invert_cost;
+    cost += gas_params.scalar_invert_cost;
     Ok(NativeResult::ok(
         cost,
         smallvec![Value::vector_u8(s.invert().to_bytes().to_vec())],
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarFromSha512GasParameters {
-    pub base_cost: u64,
-    pub per_hash_sha512_cost: u64,
-    pub per_byte_sha512_cost: u64,
-}
-
 pub(crate) fn native_scalar_from_sha512(
-    gas_params: &ScalarFromSha512GasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -111,7 +93,8 @@ pub(crate) fn native_scalar_from_sha512(
 
     let bytes = pop_arg!(arguments, Vec<u8>);
 
-    cost += gas_params.per_hash_sha512_cost + gas_params.per_byte_sha512_cost * bytes.len() as u64;
+    cost += gas_params.scalar_sha512_per_hash_cost
+        + gas_params.scalar_sha512_per_byte_cost * bytes.len() as u64;
     let s = Scalar::hash_from_bytes::<Sha512>(bytes.as_slice());
 
     Ok(NativeResult::ok(
@@ -120,14 +103,8 @@ pub(crate) fn native_scalar_from_sha512(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarMulGasParameters {
-    pub base_cost: u64,
-    pub mul_cost: u64,
-}
-
 pub(crate) fn native_scalar_mul(
-    gas_params: &ScalarMulGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -147,7 +124,7 @@ pub(crate) fn native_scalar_mul(
     debug_assert!(a.is_canonical());
     debug_assert!(b.is_canonical());
 
-    cost += gas_params.mul_cost;
+    cost += gas_params.scalar_mul_cost;
     let s = a.mul(b);
 
     Ok(NativeResult::ok(
@@ -155,14 +132,9 @@ pub(crate) fn native_scalar_mul(
         smallvec![Value::vector_u8(s.to_bytes().to_vec())],
     ))
 }
-#[derive(Debug, Clone)]
-pub struct ScalarAddGasParameters {
-    pub base_cost: u64,
-    pub add_cost: u64,
-}
 
 pub(crate) fn native_scalar_add(
-    gas_params: &ScalarAddGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -182,7 +154,7 @@ pub(crate) fn native_scalar_add(
     debug_assert!(a.is_canonical());
     debug_assert!(b.is_canonical());
 
-    cost += gas_params.add_cost;
+    cost += gas_params.scalar_add_cost;
     let s = a.add(b);
 
     Ok(NativeResult::ok(
@@ -191,14 +163,8 @@ pub(crate) fn native_scalar_add(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarSubGasParameters {
-    pub base_cost: u64,
-    pub sub_cost: u64,
-}
-
 pub(crate) fn native_scalar_sub(
-    gas_params: &ScalarSubGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -218,7 +184,7 @@ pub(crate) fn native_scalar_sub(
     debug_assert!(a.is_canonical());
     debug_assert!(b.is_canonical());
 
-    cost += gas_params.sub_cost;
+    cost += gas_params.scalar_sub_cost;
     let s = a.sub(b);
 
     Ok(NativeResult::ok(
@@ -227,14 +193,8 @@ pub(crate) fn native_scalar_sub(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarNegGasParameters {
-    pub base_cost: u64,
-    pub neg_cost: u64,
-}
-
 pub(crate) fn native_scalar_neg(
-    gas_params: &ScalarNegGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -251,7 +211,7 @@ pub(crate) fn native_scalar_neg(
     // We'd like to ensure all Move Scalar types are canonical scalars reduced modulo \ell
     debug_assert!(a.is_canonical());
 
-    cost += gas_params.neg_cost;
+    cost += gas_params.scalar_neg_cost;
     let s = a.neg();
 
     Ok(NativeResult::ok(
@@ -260,14 +220,8 @@ pub(crate) fn native_scalar_neg(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarFromU64GasParameters {
-    pub base_cost: u64,
-    pub from_u64_cost: u64,
-}
-
 pub(crate) fn native_scalar_from_u64(
-    gas_params: &ScalarFromU64GasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -279,7 +233,7 @@ pub(crate) fn native_scalar_from_u64(
 
     let num = pop_arg!(arguments, u64);
 
-    cost += gas_params.from_u64_cost;
+    cost += gas_params.scalar_from_u64_cost;
     let s = Scalar::from(num);
 
     Ok(NativeResult::ok(
@@ -288,14 +242,8 @@ pub(crate) fn native_scalar_from_u64(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarFromU128GasParameters {
-    pub base_cost: u64,
-    pub from_u128_cost: u64,
-}
-
 pub(crate) fn native_scalar_from_u128(
-    gas_params: &ScalarFromU128GasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -307,7 +255,7 @@ pub(crate) fn native_scalar_from_u128(
 
     let num = pop_arg!(arguments, u128);
 
-    cost += gas_params.from_u128_cost;
+    cost += gas_params.scalar_from_u128_cost;
     let s = Scalar::from(num);
 
     Ok(NativeResult::ok(
@@ -323,7 +271,7 @@ pub struct ScalarFrom256BitsGasParameters {
 }
 
 pub(crate) fn native_scalar_from_256_bits(
-    gas_params: &ScalarFrom256BitsGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -346,7 +294,7 @@ pub(crate) fn native_scalar_from_256_bits(
         }
     };
 
-    cost += gas_params.from_256_bits_cost;
+    cost += gas_params.scalar_from_256_bits_cost;
     let s = Scalar::from_bytes_mod_order(bytes_slice);
 
     Ok(NativeResult::ok(
@@ -355,14 +303,8 @@ pub(crate) fn native_scalar_from_256_bits(
     ))
 }
 
-#[derive(Debug, Clone)]
-pub struct ScalarFrom512BitsGasParameters {
-    pub base_cost: u64,
-    pub from_512_bits_cost: u64,
-}
-
 pub(crate) fn native_scalar_from_512_bits(
-    gas_params: &ScalarFrom512BitsGasParameters,
+    gas_params: &GasParameters,
     _context: &mut NativeContext,
     _ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
@@ -385,7 +327,7 @@ pub(crate) fn native_scalar_from_512_bits(
         }
     };
 
-    cost += gas_params.from_512_bits_cost;
+    cost += gas_params.scalar_from_512_bits_cost;
     let s = Scalar::from_bytes_mod_order_wide(&bytes_slice);
 
     Ok(NativeResult::ok(

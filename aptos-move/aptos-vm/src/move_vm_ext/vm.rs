@@ -6,7 +6,7 @@ use crate::{
     natives::aptos_natives,
 };
 use aptos_gas::NativeGasParameters;
-use framework::natives::ristretto255_point::NativeRistrettoPointContext;
+use framework::natives::cryptography::ristretto255_point::NativeRistrettoPointContext;
 use framework::natives::{code::NativeCodeContext, transaction_context::NativeTransactionContext};
 use move_deps::{
     move_binary_format::errors::VMResult,
