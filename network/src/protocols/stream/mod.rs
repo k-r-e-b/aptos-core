@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::protocols::wire::messaging::v1::{MultiplexMessage, NetworkMessage};
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{bail, ensure};
 use aptos_id_generator::{IdGenerator, U32IdGenerator};
 use channel::Sender;
-use futures::channel::mpsc::SendError;
 use futures_util::SinkExt;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
@@ -141,14 +140,20 @@ impl InboundStream {
 pub struct OutboundStream {
     request_id_gen: U32IdGenerator,
     max_frame_size: usize,
+    max_message_size: usize,
     stream_tx: Sender<MultiplexMessage>,
 }
 
 impl OutboundStream {
-    pub fn new(max_frame_size: usize, stream_tx: Sender<MultiplexMessage>) -> Self {
+    pub fn new(
+        max_frame_size: usize,
+        max_message_size: usize,
+        stream_tx: Sender<MultiplexMessage>,
+    ) -> Self {
         Self {
             request_id_gen: U32IdGenerator::new(),
-            max_frame_size,
+            max_frame_size: max_frame_size - 32, // some buffer for metadata
+            max_message_size,
             stream_tx,
         }
     }
@@ -157,7 +162,13 @@ impl OutboundStream {
         message.len() > self.max_frame_size && !matches!(message, NetworkMessage::Error(_))
     }
 
-    pub async fn stream_message(&mut self, mut message: NetworkMessage) -> Result<(), SendError> {
+    pub async fn stream_message(&mut self, mut message: NetworkMessage) -> anyhow::Result<()> {
+        ensure!(
+            message.len() < self.max_message_size,
+            "Message length {} exceed size limit {}",
+            message.len(),
+            self.max_message_size,
+        );
         let request_id = self.request_id_gen.next();
         let rest = match &mut message {
             NetworkMessage::Error(_) => {
