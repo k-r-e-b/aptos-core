@@ -22,7 +22,7 @@ pub enum StreamMessage {
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub struct StreamHeader {
     pub request_id: u32,
-    pub num_fragments: u8,
+    pub num_fragments: u16,
     /// original message with chunked raw data
     pub message: NetworkMessage,
 }
@@ -31,7 +31,7 @@ pub struct StreamHeader {
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub struct StreamFragment {
     pub request_id: u32,
-    pub fragment_id: u8,
+    pub fragment_id: u16,
     #[serde(with = "serde_bytes")]
     pub raw_data: Vec<u8>,
 }
@@ -95,8 +95,8 @@ impl InboundStreamBuffer {
 
 pub struct InboundStream {
     request_id: u32,
-    num_fragments: u8,
-    current_fragment_id: u8,
+    num_fragments: u16,
+    current_fragment_id: u16,
     message: NetworkMessage,
 }
 
@@ -187,7 +187,7 @@ impl OutboundStream {
         let chunks = rest.chunks(self.max_frame_size);
         let header = StreamMessage::Header(StreamHeader {
             request_id,
-            num_fragments: chunks.len() as u8,
+            num_fragments: chunks.len() as u16,
             message,
         });
         self.stream_tx
@@ -196,7 +196,7 @@ impl OutboundStream {
         for (index, chunk) in chunks.enumerate() {
             let message = StreamMessage::Fragment(StreamFragment {
                 request_id,
-                fragment_id: index as u8 + 1,
+                fragment_id: index as u16 + 1,
                 raw_data: Vec::from(chunk),
             });
             self.stream_tx

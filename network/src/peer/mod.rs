@@ -196,7 +196,7 @@ where
                 max_concurrent_outbound_rpcs,
             ),
             state: State::Connected,
-            max_frame_size,
+            max_frame_size: 1024,
             max_message_size,
             inbound_rate_limiter,
             outbound_rate_limiter,
