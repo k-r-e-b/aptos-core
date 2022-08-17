@@ -451,7 +451,7 @@ pub fn convert_event(event: &Event) -> extractor::Event {
     extractor::Event {
         key: Some(extractor::EventKey {
             creation_number: event.key.0.get_creation_number(),
-            account_address: event.key.0.get_creator_address().to_string(),
+            account_address: event.key.0.get_creator_address().to_hex_literal(),
         }),
         sequence_number: event.sequence_number.0,
         r#type: Some(convert_move_type(&event.typ)),
