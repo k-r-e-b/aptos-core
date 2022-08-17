@@ -22,12 +22,18 @@
 /// arithmetic operations.
 ///
 /// In the future, we might support additional features:
-///  * For Scalar:
+///
+/// * For scalars:
 ///    - batch_invert()
+///
 ///  * For points:
+///    - basepoint_mul() for faster multiplications using precomputation tables (see MSM notes below for limitations)
+///
 ///    - double()
 ///      + The challenge is that curve25519-dalek does NOT export double for Ristretto points (nor for Edwards)
+///
 ///    - double_and_compress_batch()
+///
 ///    - fixed-base, variable-time via optional_mixed_multiscalar_mul() in VartimePrecomputedMultiscalarMul
 ///      + This would require a storage-friendly RistrettoBasepointTable and an in-memory variant of it too
 ///      + Similar to the CompressedRistretto and RistrettoPoint structs in this module
@@ -36,6 +42,8 @@
 module aptos_std::ristretto255 {
     use std::option::Option;
     use std::bit_vector::BitVector;
+    #[test_only]
+    use std::option;
 
     /// The order of the Ristretto255 group and its scalar field, in little-endian.
     const ORDER_ELL : vector<u8> = vector[
@@ -54,6 +62,7 @@ module aptos_std::ristretto255 {
     /// The maximum size in bytes of a canonically-encoded Ristretto255 point is 32 bytes.
     const MAX_POINT_NUM_BYTES: u64 = 32u64;
 
+    /// The generator of the Ristretto255 group, also known as the "basepoint".
     const BASE_POINT: vector<u8> = vector[
         0xe2, 0xf2, 0xae, 0x0a, 0x6a, 0xbc, 0x4e, 0x71,
         0xa8, 0x84, 0xa9, 0x61, 0xc5, 0x00, 0x51, 0x5f,
@@ -64,7 +73,7 @@ module aptos_std::ristretto255 {
     /// This struct represents a serialized point on the Ristretto255 curve, in 32 bytes.
     /// This struct can be decompressed from storage into an in-memory RistrettoPoint, on which fast curve arithmetic
     /// can be performed.
-    struct CompressedRistretto has key, store, drop {
+    struct CompressedRistretto has copy, store, drop {
         data: vector<u8>
     }
 
@@ -129,6 +138,26 @@ module aptos_std::ristretto255 {
         }
     }
 
+
+    /// Hashes the input to a uniformly-at-random RistrettoPoint via SHA512.
+    public fun new_point_from_sha512(sha512: vector<u8>): RistrettoPoint {
+        RistrettoPoint {
+            handle: new_point_from_sha512_internal(sha512)
+        }
+    }
+
+    /// Samples a uniformly-at-random RistrettoPoint given a sequence of 64 uniformly-at-random bytes. This function
+    /// can be used to build a collision-resistant hash function that maps 64-byte messages to RistrettoPoint's.
+    public fun new_point_from_64_uniform_bytes(bytes: vector<u8>): Option<RistrettoPoint> {
+        if (std::vector::length(&bytes) == 64) {
+            std::option::some(RistrettoPoint {
+                handle: new_point_from_64_uniform_bytes_internal(bytes)
+            })
+        } else {
+            std::option::none<RistrettoPoint>()
+        }
+    }
+
     /// Decompresses a CompressedRistretto from storage into a RistrettoPoint which can be used for fast arithmetic.
     public fun point_decompress(point: &CompressedRistretto): RistrettoPoint {
         // NOTE: Our CompressedRistretto invariant assures us that every CompressedRistretto in storage is a valid
@@ -164,6 +193,12 @@ module aptos_std::ristretto255 {
         point
     }
 
+    /// Returns (a * some_point + b * base_point), where base_point is the Ristretto basepoint encoded in `BASE_POINT`.
+    public fun basepoint_double_mul(a: &Scalar, some_point: &RistrettoPoint, b: &Scalar): RistrettoPoint {
+        RistrettoPoint {
+            handle: basepoint_double_mul_internal(a.data, some_point, b.data)
+        }
+    }
 
     /// Returns a + b
     public fun point_add(a: &RistrettoPoint, b: &RistrettoPoint): RistrettoPoint {
@@ -225,7 +260,7 @@ module aptos_std::ristretto255 {
         }
     }
 
-    /// Hashes the input to a Scalar via SHA512
+    /// Hashes the input to a uniformly-at-random Scalar via SHA512
     public fun new_scalar_from_sha512(sha512_input: vector<u8>): Scalar {
         Scalar {
             data: scalar_from_sha512_internal(sha512_input)
@@ -266,11 +301,12 @@ module aptos_std::ristretto255 {
         }
     }
 
-    /// Creates a Scalar from 64 bytes by reducing the little-endian-encoded number in those bytes modulo $\ell$.
-    public fun new_scalar_from_reduced_512_bits(bytes: vector<u8>): Option<Scalar> {
+    /// Samples a scalar uniformly-at-random given 64 uniform-at-random bytes as input by reducing the little-endian-encoded number
+    /// in those bytes modulo $\ell$.
+    public fun new_scalar_from_64_uniform_bytes(bytes: vector<u8>): Option<Scalar> {
         if (std::vector::length(&bytes) == 64) {
             std::option::some(Scalar {
-                data: scalar_from_512_bits_internal(bytes)
+                data: scalar_from_64_uniform_bytes_internal(bytes)
             })
         } else {
             std::option::none()
@@ -286,8 +322,6 @@ module aptos_std::ristretto255 {
 
     /// Returns true if the given Scalar equals 0.
     public fun scalar_is_zero(s: &Scalar): bool {
-        //assert!(scalar_is_canonical_internal(s.data), 1);
-
         s.data == x"0000000000000000000000000000000000000000000000000000000000000000"
     }
 
@@ -300,16 +334,11 @@ module aptos_std::ristretto255 {
 
     /// Returns true if the given Scalar equals 1.
     public fun scalar_is_one(s: &Scalar): bool {
-        //assert!(scalar_is_canonical_internal(s.data), 1);
-
         s.data == x"0100000000000000000000000000000000000000000000000000000000000000"
     }
 
     /// Returns true if the two scalars are equal.
     public fun scalar_equals(lhs: &Scalar, rhs: &Scalar): bool {
-        //assert!(scalar_is_canonical_internal(lhs.data), 1);
-        //assert!(scalar_is_canonical_internal(rhs.data), 1);
-
         lhs.data == rhs.data
     }
 
@@ -342,8 +371,6 @@ module aptos_std::ristretto255 {
     /// Returns the inverse s^{-1} mod \ell of a scalar s.
     /// Returns None if s is zero.
     public fun scalar_invert(s: &Scalar): Option<Scalar> {
-        //assert!(scalar_is_canonical_internal(s.data), 1);
-
         if (scalar_is_zero(s)) {
             std::option::none<Scalar>()
         } else {
@@ -417,6 +444,10 @@ module aptos_std::ristretto255 {
     //
     // Only used internally for implementing CompressedRistretto and RistrettoPoint
     //
+    native fun new_point_from_sha512_internal(sha512: vector<u8>): u64;
+
+    native fun new_point_from_64_uniform_bytes_internal(bytes: vector<u8>): u64;
+
     native fun point_is_canonical_internal(bytes: vector<u8>): bool;
 
     native fun point_identity_internal(): u64;
@@ -426,6 +457,8 @@ module aptos_std::ristretto255 {
     native fun point_compress_internal(point: &RistrettoPoint): vector<u8>;
 
     native fun point_mul_internal(point: &RistrettoPoint, a: vector<u8>, in_place: bool): u64;
+
+    native fun basepoint_double_mul_internal(a: vector<u8>, some_point: &RistrettoPoint, b: vector<u8>): u64;
 
     native fun point_add_internal(a: &RistrettoPoint, b: &RistrettoPoint, in_place: bool): u64;
     native fun point_sub_internal(a: &RistrettoPoint, b: &RistrettoPoint, in_place: bool): u64;
@@ -443,7 +476,7 @@ module aptos_std::ristretto255 {
 
     native fun scalar_from_256_bits_internal(bytes: vector<u8>): vector<u8>;
 
-    native fun scalar_from_512_bits_internal(bytes: vector<u8>): vector<u8>;
+    native fun scalar_from_64_uniform_bytes_internal(bytes: vector<u8>): vector<u8>;
 
     native fun scalar_invert_internal(bytes: vector<u8>): vector<u8>;
 
@@ -882,6 +915,33 @@ module aptos_std::ristretto255 {
     }
 
     #[test]
+    fun test_basepoint_double_mul() {
+        let expected = option::extract(&mut new_point_from_bytes(x"be5d615d8b8f996723cdc6e1895b8b6d312cc75d1ffb0259873b99396a38c05a"));
+
+        let a = Scalar { data: A_SCALAR };
+        let a_point = option::extract(&mut new_point_from_bytes(A_POINT));
+        let b = Scalar { data: B_SCALAR };
+        assert!(point_equals(&expected, &basepoint_double_mul(&a, &a_point, &b)), 1);
+    }
+
+    #[test]
+    fun test_new_point_from_sha512() {
+        let msg = b"To really appreciate architecture, you may even need to commit a murder";
+        let expected = option::extract(&mut new_point_from_bytes(x"baaa91eb43e5e2f12ffc96347e14bc458fdb1772b2232b08977ee61ea9f84e31"));
+
+        assert!(point_equals(&expected, &new_point_from_sha512(msg)), 1);
+    }
+
+    #[test]
+    fun test_new_point_from_64_uniform_bytes() {
+        let bytes_64 = x"baaa91eb43e5e2f12ffc96347e14bc458fdb1772b2232b08977ee61ea9f84e31e87feda199d72b83de4f5b2d45d34805c57019c6c59c42cb70ee3d19aa996f75";
+        let expected = option::extract(&mut new_point_from_bytes(x"4a8e429f906478654232d7ae180ad60854754944ac67f38e20d8fa79e4b7d71e"));
+
+        let point = option::extract(&mut new_point_from_64_uniform_bytes(bytes_64));
+        assert!(point_equals(&expected, &point), 1);
+    }
+
+    #[test]
     fun test_scalar_basic_viability() {
         // Test conversion from u8
         let two = Scalar { data: TWO_SCALAR };
@@ -1114,7 +1174,7 @@ module aptos_std::ristretto255 {
         std::vector::append(&mut x_plus_2_to_256_times_x, X_SCALAR);
         std::vector::append(&mut x_plus_2_to_256_times_x, X_SCALAR);
 
-        let reduced = std::option::extract(&mut new_scalar_from_reduced_512_bits(x_plus_2_to_256_times_x));
+        let reduced = std::option::extract(&mut new_scalar_from_64_uniform_bytes(x_plus_2_to_256_times_x));
         let expected = Scalar { data: CANONICAL_X_PLUS_2_TO_256_TIMES_X_SCALAR };
         assert!(scalar_equals(&reduced, &expected), 1)
     }

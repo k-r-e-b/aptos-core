@@ -32,25 +32,31 @@ crate::natives::define_gas_parameters_for_natives!(GasParameters, "aptos_framewo
     [.bit_vector.big_endian_bitvector_from_byte_vector.per_byte_cost, "bit_vector.big_endian_bitvector_from_byte_vector.per_byte", 1],
 
     [.ristretto255.base_cost, "ristretto255.base", 1],
+    [.ristretto255.basepoint_double_mul_cost, "ristretto255.basepoint_double_mul", 1],
+
     [.ristretto255.point_add_cost, "ristretto255.point_add", 1],
     [.ristretto255.point_compress_cost, "ristretto255.point_compress", 1],
     [.ristretto255.point_decompress_cost, "ristretto255.point_decompress", 1],
     [.ristretto255.point_equals_cost, "ristretto255.point_equals", 1],
+    [.ristretto255.point_from_64_uniform_bytes_cost, "ristretto255.point_from_64_uniform_bytes", 1],
     [.ristretto255.point_identity_cost, "ristretto255.point_identity", 1],
     [.ristretto255.point_mul_cost, "ristretto255.point_mul", 1],
     [.ristretto255.point_neg_cost, "ristretto255.point_neg", 1],
     [.ristretto255.point_sub_cost, "ristretto255.point_sub", 1],
 
+    // TODO(Alin): These SHA512 gas costs should be unified with the costs in our future SHA512 module
+    // (assuming same implementation complexity, which might not be the case
+    [.ristretto255.sha512_per_byte_cost, "ristretto255.scalar_sha512_per_byte", 1],
+    [.ristretto255.sha512_per_hash_cost, "ristretto255.scalar_sha512_per_hash", 1],
+
     [.ristretto255.scalar_add_cost, "ristretto255.scalar_add", 1],
-    [.ristretto255.scalar_from_512_bits_cost, "ristretto255.scalar_from_512_bits", 1],
+    [.ristretto255.scalar_from_64_uniform_bytes_cost, "ristretto255.scalar_from_512_bits", 1],
     [.ristretto255.scalar_from_u128_cost, "ristretto255.scalar_from_u128", 1],
     [.ristretto255.scalar_from_u64_cost, "ristretto255.scalar_from_u64", 1],
     [.ristretto255.scalar_invert_cost, "ristretto255.scalar_invert", 1],
     [.ristretto255.scalar_is_canonical_cost, "ristretto255.scalar_is_canonical", 1],
     [.ristretto255.scalar_mul_cost, "ristretto255.scalar_mul", 1],
     [.ristretto255.scalar_neg_cost, "ristretto255.scalar_neg", 1],
-    [.ristretto255.scalar_sha512_per_byte_cost, "ristretto255.scalar_sha512_per_byte", 1],
-    [.ristretto255.scalar_sha512_per_hash_cost, "ristretto255.scalar_sha512_per_hash", 1],
     [.ristretto255.scalar_sub_cost, "ristretto255.scalar_sub", 1],
 
     [.signature.ed25519_validate_pubkey.base_cost, "signature.ed25519_validate_pubkey.base", 1],

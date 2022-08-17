@@ -747,6 +747,10 @@
           "val": "1"
         },
         {
+          "key": "aptos_framework.ristretto255.basepoint_double_mul",
+          "val": "1"
+        },
+        {
           "key": "aptos_framework.ristretto255.point_add",
           "val": "1"
         },
@@ -763,6 +767,10 @@
           "val": "1"
         },
         {
+          "key": "aptos_framework.ristretto255.point_from_64_uniform_bytes",
+          "val": "1"
+        },
+        {
           "key": "aptos_framework.ristretto255.point_identity",
           "val": "1"
         },
@@ -776,6 +784,14 @@
         },
         {
           "key": "aptos_framework.ristretto255.point_sub",
+          "val": "1"
+        },
+        {
+          "key": "aptos_framework.ristretto255.scalar_sha512_per_byte",
+          "val": "1"
+        },
+        {
+          "key": "aptos_framework.ristretto255.scalar_sha512_per_hash",
           "val": "1"
         },
         {
@@ -808,14 +824,6 @@
         },
         {
           "key": "aptos_framework.ristretto255.scalar_neg",
-          "val": "1"
-        },
-        {
-          "key": "aptos_framework.ristretto255.scalar_sha512_per_byte",
-          "val": "1"
-        },
-        {
-          "key": "aptos_framework.ristretto255.scalar_sha512_per_hash",
           "val": "1"
         },
         {
