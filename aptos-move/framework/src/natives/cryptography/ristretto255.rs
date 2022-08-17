@@ -29,6 +29,7 @@ impl From<GasCost> for u64 {
 pub struct GasParameters {
     pub base_cost: u64,
 
+    pub basepoint_mul_cost: u64,
     pub basepoint_double_mul_cost: u64,
 
     pub point_add_cost: u64,
@@ -105,6 +106,10 @@ pub fn make_all(gas_params: GasParameters) -> impl Iterator<Item = (String, Nati
         (
             "point_sub_internal",
             make_native_from_func(gas_params.clone(), ristretto255_point::native_point_sub),
+        ),
+        (
+            "basepoint_mul_internal",
+            make_native_from_func(gas_params.clone(), ristretto255_point::native_basepoint_mul),
         ),
         (
             "basepoint_double_mul_internal",

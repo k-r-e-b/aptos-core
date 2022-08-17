@@ -436,6 +436,32 @@ pub(crate) fn native_point_sub(
     Ok(NativeResult::ok(cost, smallvec![Value::u64(result_handle)]))
 }
 
+pub(crate) fn native_basepoint_mul(
+    gas_params: &GasParameters,
+    context: &mut NativeContext,
+    ty_args: Vec<Type>,
+    mut args: VecDeque<Value>,
+) -> PartialVMResult<NativeResult> {
+    assert_eq!(ty_args.len(), 0);
+    assert_eq!(args.len(), 1);
+
+    let cost = gas_params.base_cost + gas_params.basepoint_mul_cost;
+
+    let point_context = context.extensions().get::<NativeRistrettoPointContext>();
+    let mut point_data = point_context.point_data.borrow_mut();
+
+    let a = pop_scalar(&mut args)?;
+
+    let basepoint = curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+
+    let result = basepoint.mul(&a);
+
+    // Compute result = a * BASEPOINT and return a RistrettoPointHandle
+    let result_handle = point_data.add_point(result);
+
+    Ok(NativeResult::ok(cost, smallvec![Value::u64(result_handle)]))
+}
+
 #[allow(non_snake_case)]
 pub(crate) fn native_basepoint_double_mul(
     gas_params: &GasParameters,

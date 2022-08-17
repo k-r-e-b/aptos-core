@@ -75,6 +75,7 @@ impl GasParameters {
             },
             ristretto255: cryptography::ristretto255::GasParameters {
                 base_cost: 0,
+                basepoint_mul_cost: 0,
                 basepoint_double_mul_cost: 0,
                 point_add_cost: 0,
                 point_compress_cost: 0,

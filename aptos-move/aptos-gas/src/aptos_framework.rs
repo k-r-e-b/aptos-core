@@ -32,6 +32,7 @@ crate::natives::define_gas_parameters_for_natives!(GasParameters, "aptos_framewo
     [.bit_vector.big_endian_bitvector_from_byte_vector.per_byte_cost, "bit_vector.big_endian_bitvector_from_byte_vector.per_byte", 1],
 
     [.ristretto255.base_cost, "ristretto255.base", 1],
+    [.ristretto255.basepoint_mul_cost, "ristretto255.basepoint_mul", 1],
     [.ristretto255.basepoint_double_mul_cost, "ristretto255.basepoint_double_mul", 1],
 
     [.ristretto255.point_add_cost, "ristretto255.point_add", 1],
