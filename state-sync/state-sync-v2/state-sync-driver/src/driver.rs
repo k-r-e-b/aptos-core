@@ -356,25 +356,36 @@ impl<
 
     /// Handles a client notification sent by the driver client
     fn handle_client_notification(&mut self, notification: DriverNotification) {
-        debug!(LogSchema::new(LogEntry::ClientNotification)
-            .message("Received a notify bootstrap notification from the client!"));
-        metrics::increment_counter(
-            &metrics::DRIVER_COUNTERS,
-            metrics::DRIVER_CLIENT_NOTIFICATION,
-        );
+        match notification {
+            DriverNotification::NotifyOnceBootstrapped(notifier_channel) => {
+                // Received a notification request for bootstrapping
+                debug!(LogSchema::new(LogEntry::ClientBootstrapNotification)
+                    .message("Received a notify bootstrap notification from the client!"));
+                metrics::increment_counter(
+                    &metrics::DRIVER_COUNTERS,
+                    metrics::DRIVER_CLIENT_BOOTSTRAP_NOTIFICATION,
+                );
 
-        // TODO(joshlind): refactor this if the client only supports one notification type!
-        // Extract the bootstrap notifier channel
-        let DriverNotification::NotifyOnceBootstrapped(notifier_channel) = notification;
-
-        // Subscribe the bootstrap notifier channel
-        if let Err(error) = self
-            .bootstrapper
-            .subscribe_to_bootstrap_notifications(notifier_channel)
-        {
-            error!(LogSchema::new(LogEntry::ClientNotification)
-                .error(&error)
-                .message("Failed to subscribe to bootstrap notifications!"));
+                // Subscribe the bootstrap notifier channel
+                if let Err(error) = self
+                    .bootstrapper
+                    .subscribe_to_bootstrap_notifications(notifier_channel)
+                {
+                    error!(LogSchema::new(LogEntry::ClientBootstrapNotification)
+                        .error(&error)
+                        .message("Failed to subscribe to bootstrap notifications!"));
+                }
+            }
+            DriverNotification::NotifyOnceRecovered(_notifier_channel) => {
+                // Received a notification request for recovery
+                debug!(LogSchema::new(LogEntry::ClientRecoverNotification)
+                    .message("Received a notify recover notification from the client!"));
+                metrics::increment_counter(
+                    &metrics::DRIVER_COUNTERS,
+                    metrics::DRIVER_CLIENT_RECOVER_NOTIFICATION,
+                );
+                unimplemented!();
+            }
         }
     }
 

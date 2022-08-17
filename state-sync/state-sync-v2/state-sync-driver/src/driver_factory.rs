@@ -28,17 +28,19 @@ use storage_interface::DbReaderWriter;
 use tokio::runtime::{Builder, Runtime};
 
 /// Creates a new state sync driver and client
-pub struct DriverFactory {
+pub struct DriverFactory<MetadataStorage> {
     client_notification_sender: mpsc::UnboundedSender<DriverNotification>,
+    metadata_storage: MetadataStorage,
     _driver_runtime: Option<Runtime>,
 }
 
-impl DriverFactory {
+impl<MetadataStorage: MetadataStorageInterface + Clone + Send + Sync + 'static>
+    DriverFactory<MetadataStorage>
+{
     /// Creates and spawns a new state sync driver
     pub fn create_and_spawn_driver<
         ChunkExecutor: ChunkExecutorTrait + 'static,
         MempoolNotifier: MempoolNotificationSender + 'static,
-        MetadataStorage: MetadataStorageInterface + Clone + Send + Sync + 'static,
     >(
         create_runtime: bool,
         node_config: &NodeConfig,
@@ -122,7 +124,7 @@ impl DriverFactory {
             error_notification_listener,
             event_subscription_service,
             mempool_notification_handler,
-            metadata_storage,
+            metadata_storage.clone(),
             storage_synchronizer,
             aptos_data_client,
             streaming_service_client,
@@ -139,29 +141,35 @@ impl DriverFactory {
         Self {
             client_notification_sender,
             _driver_runtime: driver_runtime,
+            metadata_storage,
         }
     }
 
     /// Returns a new client that can be used to communicate with the driver
-    pub fn create_driver_client(&self) -> DriverClient {
-        DriverClient::new(self.client_notification_sender.clone())
+    pub fn create_driver_client(&self) -> DriverClient<MetadataStorage> {
+        DriverClient::new(
+            self.metadata_storage.clone(),
+            self.client_notification_sender.clone(),
+        )
     }
 }
 
 /// A struct for holding the various runtimes required by state sync v2.
 /// Note: it's useful to maintain separate runtimes because the logger
 /// can prepend all logs with the runtime thread name.
-pub struct StateSyncRuntimes {
+pub struct StateSyncRuntimes<MetadataStorage> {
     _aptos_data_client: Runtime,
-    state_sync: DriverFactory,
+    state_sync: DriverFactory<MetadataStorage>,
     _storage_service: Runtime,
     _streaming_service: Runtime,
 }
 
-impl StateSyncRuntimes {
+impl<MetadataStorage: MetadataStorageInterface + Clone + Send + Sync + 'static>
+    StateSyncRuntimes<MetadataStorage>
+{
     pub fn new(
         aptos_data_client: Runtime,
-        state_sync: DriverFactory,
+        state_sync: DriverFactory<MetadataStorage>,
         storage_service: Runtime,
         streaming_service: Runtime,
     ) -> Self {
@@ -173,9 +181,9 @@ impl StateSyncRuntimes {
         }
     }
 
-    pub fn block_until_initialized(&self) {
+    pub fn block_until_completed(&self) {
         let state_sync_client = self.state_sync.create_driver_client();
-        block_on(state_sync_client.notify_once_bootstrapped())
+        block_on(async move { state_sync_client.notify_once_completed().await })
             .expect("State sync v2 initialization failure");
     }
 }

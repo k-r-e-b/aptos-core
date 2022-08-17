@@ -343,6 +343,13 @@ mock! {
             last_persisted_state_value_index: u64,
             snapshot_sync_completed: bool,
         ) -> Result<(), Error>;
+
+        fn completed_sync_request(
+            &self,
+            target_ledger_info: &LedgerInfoWithSignatures,
+        ) -> Result<(), Error>;
+
+        fn pending_sync_request(&self) -> Result<Option<LedgerInfoWithSignatures>, Error>;
     }
 
     impl Clone for MetadataStorage {

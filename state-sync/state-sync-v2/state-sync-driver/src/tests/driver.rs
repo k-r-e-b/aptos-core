@@ -19,17 +19,20 @@ use aptos_types::{
     transaction::{Transaction, WriteSetPayload},
     waypoint::Waypoint,
 };
+use futures::FutureExt;
+
 use aptos_vm::AptosVM;
 use aptosdb::AptosDB;
 use claim::{assert_err, assert_none};
-use consensus_notifications::{ConsensusNotificationSender, ConsensusNotifier};
+use consensus_notifications::ConsensusNotificationSender;
+use consensus_notifications::ConsensusNotifier;
 use data_streaming_service::streaming_client::new_streaming_service_client_listener_pair;
 use event_notifications::{
     EventNotificationListener, EventSubscriptionService, ReconfigNotificationListener,
 };
 use executor::chunk_executor::ChunkExecutor;
 use executor_test_helpers::bootstrap_genesis;
-use futures::{FutureExt, StreamExt};
+use futures::StreamExt;
 use mempool_notifications::MempoolNotificationListener;
 use network::application::{interface::MultiNetworkSender, storage::PeerMetadataStorage};
 use std::{collections::HashMap, sync::Arc};
@@ -45,7 +48,7 @@ async fn test_auto_bootstrapping() {
 
     // Wait until the validator is bootstrapped (auto-bootstrapping should occur)
     let driver_client = validator_driver.create_driver_client();
-    driver_client.notify_once_bootstrapped().await.unwrap();
+    driver_client.notify_once_completed().await.unwrap();
 }
 
 #[tokio::test]
@@ -78,7 +81,7 @@ async fn test_mempool_commit_notifications() {
 
     // Wait until the validator is bootstrapped
     let driver_client = validator_driver.create_driver_client();
-    driver_client.notify_once_bootstrapped().await.unwrap();
+    driver_client.notify_once_completed().await.unwrap();
 
     // Create commit data for testing
     let transactions = vec![create_transaction(), create_transaction()];
@@ -118,7 +121,7 @@ async fn test_reconfiguration_notifications() {
 
     // Wait until the validator is bootstrapped
     let driver_client = validator_driver.create_driver_client();
-    driver_client.notify_once_bootstrapped().await.unwrap();
+    driver_client.notify_once_completed().await.unwrap();
 
     // Test different events
     let reconfiguration_event = new_epoch_event_key();
@@ -185,7 +188,7 @@ async fn test_consensus_sync_request() {
 async fn create_validator_driver(
     event_key_subscriptions: Option<Vec<EventKey>>,
 ) -> (
-    DriverFactory,
+    DriverFactory<PersistentMetadataStorage>,
     ConsensusNotifier,
     MempoolNotificationListener,
     ReconfigNotificationListener,
@@ -201,7 +204,7 @@ async fn create_validator_driver(
 async fn create_full_node_driver(
     event_key_subscriptions: Option<Vec<EventKey>>,
 ) -> (
-    DriverFactory,
+    DriverFactory<PersistentMetadataStorage>,
     ConsensusNotifier,
     MempoolNotificationListener,
     ReconfigNotificationListener,
@@ -219,7 +222,7 @@ async fn create_driver_for_tests(
     waypoint: Waypoint,
     event_key_subscriptions: Option<Vec<EventKey>>,
 ) -> (
-    DriverFactory,
+    DriverFactory<PersistentMetadataStorage>,
     ConsensusNotifier,
     MempoolNotificationListener,
     ReconfigNotificationListener,

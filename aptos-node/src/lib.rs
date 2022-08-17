@@ -154,7 +154,7 @@ pub struct AptosHandle {
     _mempool: Runtime,
     _network_runtimes: Vec<Runtime>,
     _sf_stream: Option<Runtime>,
-    _state_sync_runtimes: StateSyncRuntimes,
+    _state_sync_runtimes: StateSyncRuntimes<PersistentMetadataStorage>,
     _telemetry_runtime: Option<Runtime>,
 }
 
@@ -331,7 +331,7 @@ fn create_state_sync_runtimes<M: MempoolNotificationSender + 'static>(
     waypoint: Waypoint,
     event_subscription_service: EventSubscriptionService,
     db_rw: DbReaderWriter,
-) -> anyhow::Result<StateSyncRuntimes> {
+) -> anyhow::Result<StateSyncRuntimes<PersistentMetadataStorage>> {
     // Start the state sync storage service
     let storage_service_runtime = setup_state_sync_storage_service(
         node_config.state_sync.storage_service,
@@ -700,9 +700,9 @@ pub fn setup_environment(node_config: NodeConfig) -> anyhow::Result<AptosHandle>
         // (in case it's present). There is no sense to start consensus prior to that.
         // TODO: Note that we need the networking layer to be able to discover & connect to the
         // peers with potentially outdated network identity public keys.
-        debug!("Wait until state sync is initialized");
-        state_sync_runtimes.block_until_initialized();
-        debug!("State sync initialization complete.");
+        debug!("Wait until state sync has completed");
+        state_sync_runtimes.block_until_completed();
+        debug!("State sync has completed.");
 
         // Initialize and start consensus.
         instant = Instant::now();

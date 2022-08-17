@@ -29,7 +29,8 @@ impl<'a> LogSchema<'a> {
 pub enum LogEntry {
     AutoBootstrapping,
     Bootstrapper,
-    ClientNotification,
+    ClientBootstrapNotification,
+    ClientRecoverNotification,
     ConsensusNotification,
     Driver,
     NotificationHandler,

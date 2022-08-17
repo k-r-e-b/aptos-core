@@ -47,6 +47,18 @@ pub trait MetadataStorageInterface {
         last_persisted_state_value_index: u64,
         snapshot_sync_completed: bool,
     ) -> Result<(), Error>;
+
+    /// Updates the sync request for the given target ledger info as completed.
+    /// If not pending sync request is found, an error is returned.
+    fn completed_sync_request(
+        &self,
+        target_ledger_info: &LedgerInfoWithSignatures,
+    ) -> Result<(), Error>;
+
+    /// Returns the target ledger info for any pending sync request received
+    /// from consensus that has not yet completed. If no pending sync request
+    /// is found, None is returned.
+    fn pending_sync_request(&self) -> Result<Option<LedgerInfoWithSignatures>, Error>;
 }
 
 /// The name of the state sync db file
@@ -106,10 +118,13 @@ impl PersistentMetadataStorage {
                     ))
                 })?;
         match maybe_metadata_value {
-            Some(metadata_value) => {
-                let MetadataValue::StateSnapshotSync(snapshot_progress) = metadata_value;
+            Some(MetadataValue::StateSnapshotSync(snapshot_progress)) => {
                 Ok(Some(snapshot_progress))
             }
+            Some(value) => Err(Error::UnexpectedError(format!(
+                "Expected to find a snapshot progress entry, but found: {:?}",
+                value
+            ))),
             None => Ok(None),
         }
     }
@@ -150,6 +165,28 @@ impl PersistentMetadataStorage {
             .map_err(|error| {
                 Error::StorageError(format!(
                     "Failed to batch put the metadata key and value. Key: {:?}, Value: {:?}. Error: {:?}", metadata_key, metadata_value, error
+                ))
+            })?;
+
+        // Write the schema batch to the database
+        self.database.write_schemas(batch).map_err(|error| {
+            Error::StorageError(format!(
+                "Failed to write the metadata schema. Error: {:?}",
+                error
+            ))
+        })
+    }
+
+    /// Deletes the given key (and any associated value) from the database
+    fn delete_key_value(&self, metadata_key: MetadataKey) -> Result<(), Error> {
+        // Create the schema batch
+        let batch = SchemaBatch::new();
+        batch
+            .delete::<MetadataSchema>(&metadata_key)
+            .map_err(|error| {
+                Error::StorageError(format!(
+                    "Failed to batch delete the metadata key. Key: {:?}. Error: {:?}",
+                    metadata_key, error
                 ))
             })?;
 
@@ -210,6 +247,53 @@ impl MetadataStorageInterface for PersistentMetadataStorage {
         // Insert the new key/value pair
         self.commit_key_value(metadata_key, metadata_value)
     }
+
+    fn completed_sync_request(
+        &self,
+        target_ledger_info: &LedgerInfoWithSignatures,
+    ) -> Result<(), Error> {
+        // Ensure that a previous sync request exists and that it has the same target
+        if let Some(pending_sync_target) = self.pending_sync_request()? {
+            if target_ledger_info != &pending_sync_target {
+                return Err(Error::StorageError(format!(
+                    "Failed to mark the sync request complete! \
+                The given target does not match the previously stored target.\
+                Given target: {:?}, stored target: {:?}",
+                    target_ledger_info, pending_sync_target
+                )));
+            }
+        } else {
+            return Err(Error::StorageError(format!(
+                "Failed to mark the sync request complete. \
+                No pending sync request was found! Given target: {:?}",
+                target_ledger_info
+            )));
+        }
+
+        // Delete the key/value pair
+        self.delete_key_value(MetadataKey::PendingSyncRequest)
+    }
+
+    fn pending_sync_request(&self) -> Result<Option<LedgerInfoWithSignatures>, Error> {
+        let metadata_key = MetadataKey::PendingSyncRequest;
+        let maybe_metadata_value =
+            self.database
+                .get::<MetadataSchema>(&metadata_key)
+                .map_err(|error| {
+                    Error::StorageError(format!(
+                        "Failed to read metadata value for key: {:?}. Error: {:?}",
+                        metadata_key, error
+                    ))
+                })?;
+        match maybe_metadata_value {
+            Some(MetadataValue::PendingSyncRequest(target)) => Ok(Some(target)),
+            Some(value) => Err(Error::UnexpectedError(format!(
+                "Expected to find a pending sync request, but found: {:?}",
+                value
+            ))),
+            None => Ok(None),
+        }
+    }
 }
 
 /// A simple struct for recording the progress of a state snapshot sync
@@ -237,14 +321,16 @@ pub mod database_schema {
     #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
     #[repr(u8)]
     pub enum MetadataKey {
-        StateSnapshotSync, // A state snapshot sync that was started
+        PendingSyncRequest, // A pending sync request that was sent to state sync
+        StateSnapshotSync,  // A state snapshot sync that was started
     }
 
     /// A metadata value that can be inserted into the database
     #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
     #[repr(u8)]
     pub enum MetadataValue {
-        StateSnapshotSync(StateSnapshotProgress), // A state snapshot sync progress marker
+        PendingSyncRequest(LedgerInfoWithSignatures), // A pending sync request target
+        StateSnapshotSync(StateSnapshotProgress),     // A state snapshot sync progress marker
     }
 
     impl KeyCodec<MetadataSchema> for MetadataKey {

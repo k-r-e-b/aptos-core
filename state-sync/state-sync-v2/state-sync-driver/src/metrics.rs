@@ -7,9 +7,10 @@ use aptos_metrics_core::{
 use once_cell::sync::Lazy;
 
 /// Useful metric labels
-pub const DRIVER_CLIENT_NOTIFICATION: &str = "driver_client_notification";
-pub const DRIVER_CONSENSUS_COMMIT_NOTIFICATION: &str = "driver_consensus_commit_notification";
-pub const DRIVER_CONSENSUS_SYNC_NOTIFICATION: &str = "driver_consensus_sync_notification";
+pub const DRIVER_CLIENT_BOOTSTRAP_NOTIFICATION: &str = "client_bootstrap_notification";
+pub const DRIVER_CLIENT_RECOVER_NOTIFICATION: &str = "client_recover_notification";
+pub const DRIVER_CONSENSUS_COMMIT_NOTIFICATION: &str = "consensus_commit_notification";
+pub const DRIVER_CONSENSUS_SYNC_NOTIFICATION: &str = "consensus_sync_notification";
 pub const STORAGE_SYNCHRONIZER_PENDING_DATA: &str = "storage_synchronizer_pending_data";
 
 /// An enum representing the component currently executing
